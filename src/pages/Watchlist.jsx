@@ -1,12 +1,15 @@
 import { Link } from 'react-router-dom'
 import { Heart, ArrowRight, LogIn } from 'lucide-react'
 import ProductCard from '../components/ProductCard'
+import { useProductHistories } from '../hooks/useData'
 import { useFavorites } from '../hooks/useFavorites'
 import { useAuth } from '../hooks/useAuth'
 
 export default function Watchlist() {
   const { user } = useAuth()
   const { favoriteProducts, loading, toggleFavorite, isFavorite } = useFavorites()
+  const favCodes = favoriteProducts.map(p => p.product_code)
+  const { histories } = useProductHistories(favCodes)
 
   if (!user) {
     return (
@@ -58,6 +61,7 @@ export default function Watchlist() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {favoriteProducts.map(p => (
               <ProductCard key={p.product_code} product={p}
+                history={histories[p.product_code] || []}
                 isFavorite={isFavorite(p.product_code)} onToggleFavorite={toggleFavorite} />
             ))}
           </div>

@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Search, SlidersHorizontal, X, Package, ChevronDown, ArrowUpDown, GitCompareArrows } from 'lucide-react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Search, SlidersHorizontal, X, Package, ChevronDown, ArrowUpDown, GitCompareArrows, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import ProductCard from '../components/ProductCard'
-import { useProducts, useThemeList, useAvailabilityStatuses, useAgeRanges } from '../hooks/useData'
+import { useProducts, useProductHistories, useThemeList, useAvailabilityStatuses, useAgeRanges } from '../hooks/useData'
 import { useFavorites } from '../hooks/useFavorites'
 import { useAuth } from '../hooks/useAuth'
-import { useNavigate } from 'react-router-dom'
 
 const SORT_OPTIONS = [
   { value: 'price_usd-asc', label: 'Price: Low → High' },
@@ -16,8 +15,10 @@ const SORT_OPTIONS = [
   { value: 'discount_usd-desc', label: 'Biggest Discount' },
 ]
 
+const PER_PAGE = 40
+
 export default function Explorer() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuth()
   const { isFavorite, toggleFavorite } = useFavorites()
@@ -40,6 +41,7 @@ export default function Explorer() {
   const [compareMode, setCompareMode] = useState(false)
   const [compareList, setCompareList] = useState([])
   const [debouncedSearch, setDebouncedSearch] = useState(search)
+  const [page, setPage] = useState(1)
 
   const themes = useThemeList()
   const availStatuses = useAvailabilityStatuses()
@@ -49,6 +51,11 @@ export default function Explorer() {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
     return () => clearTimeout(t)
   }, [search])
+
+  // Reset to page 1 when any filter changes
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, theme, inStock, onSale, isNew, minPrice, maxPrice, minPieces, maxPieces, minRating, ageRange, availability, sortBy, sortDir])
 
   const handleSort = (val) => {
     const [field, dir] = val.split('-')
@@ -72,10 +79,14 @@ export default function Explorer() {
     maxPrice: maxPrice ? Number(maxPrice) : undefined, minPieces: minPieces ? Number(minPieces) : undefined,
     maxPieces: maxPieces ? Number(maxPieces) : undefined, minRating: minRating ? Number(minRating) : undefined,
     ageRange: ageRange !== 'all' ? ageRange : undefined, availability: availability !== 'all' ? availability : undefined,
-    sortBy, sortDir, limit: 200,
+    sortBy, sortDir, page, perPage: PER_PAGE,
   }
 
-  const { products, loading } = useProducts(filters)
+  const { products, loading, total } = useProducts(filters)
+  const productCodes = products.map(p => p.product_code)
+  const { histories } = useProductHistories(productCodes)
+
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
   const activeFilterCount = [theme !== 'all', inStock, onSale, isNew, minPrice, maxPrice, minPieces, maxPieces, minRating, ageRange !== 'all', availability !== 'all'].filter(Boolean).length
 
@@ -83,6 +94,13 @@ export default function Explorer() {
     setTheme('all'); setInStock(false); setOnSale(false); setIsNew(false)
     setMinPrice(''); setMaxPrice(''); setMinPieces(''); setMaxPieces('')
     setMinRating(''); setAgeRange('all'); setAvailability('all'); setSearch('')
+  }
+
+  // Scroll to top on page change
+  const goToPage = (p) => {
+    const clamped = Math.max(1, Math.min(p, totalPages))
+    setPage(clamped)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
@@ -184,7 +202,17 @@ export default function Explorer() {
           </div>
         )}
 
-        <p className="text-xs text-gray-600 font-mono mb-4">{loading ? 'Loading...' : `${products.length} products`}</p>
+        {/* Results count + page info */}
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-xs text-gray-600 font-mono">
+            {loading ? 'Loading...' : `${total} products · Page ${page} of ${totalPages}`}
+          </p>
+          {!loading && totalPages > 1 && (
+            <p className="text-[10px] text-gray-600 font-mono">
+              Showing {((page - 1) * PER_PAGE) + 1}–{Math.min(page * PER_PAGE, total)} of {total}
+            </p>
+          )}
+        </div>
 
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -202,16 +230,77 @@ export default function Explorer() {
             <p className="text-gray-600 text-xs mt-1">Try adjusting your search or filters</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {products.map(p => (
-              <ProductCard key={p.product_code} product={p}
-                isFavorite={isFavorite(p.product_code)} onToggleFavorite={user ? toggleFavorite : null}
-                showCompare={compareMode} isCompared={compareList.includes(p.slug)} onToggleCompare={toggleCompare} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {products.map(p => (
+                <ProductCard key={p.product_code} product={p}
+                  history={histories[p.product_code] || []}
+                  isFavorite={isFavorite(p.product_code)} onToggleFavorite={user ? toggleFavorite : null}
+                  showCompare={compareMode} isCompared={compareList.includes(p.slug)} onToggleCompare={toggleCompare} />
+              ))}
+            </div>
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-1 mt-8 mb-4">
+                <PaginationBtn onClick={() => goToPage(1)} disabled={page === 1} title="First page">
+                  <ChevronsLeft size={14} />
+                </PaginationBtn>
+                <PaginationBtn onClick={() => goToPage(page - 1)} disabled={page === 1} title="Previous page">
+                  <ChevronLeft size={14} />
+                </PaginationBtn>
+
+                {/* Page number buttons */}
+                {pageNumbers(page, totalPages).map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dot-${i}`} className="w-8 h-8 flex items-center justify-center text-gray-600 text-xs">…</span>
+                  ) : (
+                    <button key={p} onClick={() => goToPage(p)}
+                      className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${
+                        p === page
+                          ? 'bg-lego-red text-white shadow-lg shadow-lego-red/20'
+                          : 'glass text-gray-400 hover:text-white hover:bg-white/[0.05]'
+                      }`}>
+                      {p}
+                    </button>
+                  )
+                )}
+
+                <PaginationBtn onClick={() => goToPage(page + 1)} disabled={page === totalPages} title="Next page">
+                  <ChevronRight size={14} />
+                </PaginationBtn>
+                <PaginationBtn onClick={() => goToPage(totalPages)} disabled={page === totalPages} title="Last page">
+                  <ChevronsRight size={14} />
+                </PaginationBtn>
+              </div>
+            )}
+          </>
         )}
       </div>
     </main>
+  )
+}
+
+// Generate smart page number array with ellipsis
+function pageNumbers(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages = []
+  pages.push(1)
+  if (current > 3) pages.push('...')
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+    pages.push(i)
+  }
+  if (current < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
+}
+
+function PaginationBtn({ onClick, disabled, children, title }) {
+  return (
+    <button onClick={onClick} disabled={disabled} title={title}
+      className="w-8 h-8 rounded-lg glass text-gray-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-20 disabled:cursor-not-allowed hover:bg-white/[0.05]">
+      {children}
+    </button>
   )
 }
 

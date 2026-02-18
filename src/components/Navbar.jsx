@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'react-router-dom'
-import { BarChart3, Search, Home, Heart, GitCompareArrows, User, LogOut } from 'lucide-react'
+import { BarChart3, Search, Home, Heart, GitCompareArrows, User, LogOut, Bell } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 
 const links = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/explore', label: 'Explorer', icon: Search },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/compare', label: 'Compare', icon: GitCompareArrows },
 ]
 
