@@ -42,7 +42,7 @@ function HeroSection() {
             <span className="text-gray-500">Every day.</span>
           </h1>
           <p className="text-lg text-gray-400 leading-relaxed max-w-xl mb-10 animate-slide-up stagger-2 opacity-0">
-            Bri monitors 1,500+ LEGO products daily — tracking prices, availability, and sales so you never miss a deal.
+            StudMetrics monitors 1,500+ LEGO products daily — tracking prices, availability, and sales so you never miss a deal.
           </p>
           <div className="flex flex-wrap gap-4 animate-slide-up stagger-3 opacity-0">
             <Link to="/explore" className="inline-flex items-center gap-2 px-6 py-3.5 bg-lego-red hover:bg-red-700 text-white font-display font-semibold rounded-xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-lego-red/20">
