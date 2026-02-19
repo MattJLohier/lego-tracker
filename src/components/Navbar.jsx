@@ -26,7 +26,7 @@ export default function Navbar() {
             </svg>
           </div>
           <span className="font-display font-bold text-base tracking-tight hidden sm:inline">
-            Brick<span className="text-lego-red">Pulse</span>
+            Stud<span className="text-lego-red">Metrics</span>
           </span>
         </Link>
 
