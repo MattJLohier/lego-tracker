@@ -20,7 +20,7 @@ export function useProductHistories(productCodes = []) {
       let allRows = []
       for (const chunk of chunks) {
         const { data } = await supabase
-          .from('fact_product_daily_snapshot')
+          .from('v_snapshot_timeseries')
           .select('product_code, price_usd, in_stock, availability_status, scraped_date')
           .in('product_code', chunk)
           .order('scraped_date', { ascending: true })
@@ -54,21 +54,16 @@ export function useStats() {
         supabase.from('raw_ingest_run').select('*', { count: 'exact', head: true }),
       ])
 
+      // Use the materialized view (one row per product) instead of full table scan
       const { data: snap } = await supabase
-        .from('fact_product_daily_snapshot')
-        .select('product_code, price_usd, rating, in_stock, on_sale, theme, is_new, piece_count, scraped_date')
+        .from('v_latest_products')
+        .select('product_code, price_usd, enriched_price_usd, rating, enriched_rating, in_stock, on_sale, theme, is_new, piece_count, enriched_piece_count, scraped_date')
 
       if (snap) {
-        const latest = new Map()
-        for (const r of snap) {
-          if (!latest.has(r.product_code) || r.scraped_date > latest.get(r.product_code).scraped_date) {
-            latest.set(r.product_code, r)
-          }
-        }
-        const products = Array.from(latest.values())
-        const prices = products.filter(r => r.price_usd).map(r => Number(r.price_usd))
-        const ratings = products.filter(r => r.rating).map(r => Number(r.rating))
-        const pieces = products.filter(r => r.piece_count).map(r => Number(r.piece_count))
+        const products = snap
+        const prices = products.map(r => Number(r.enriched_price_usd || r.price_usd)).filter(p => p > 0)
+        const ratings = products.map(r => Number(r.enriched_rating || r.rating)).filter(r => r > 0)
+        const pieces = products.map(r => Number(r.enriched_piece_count || r.piece_count)).filter(p => p > 0)
         const totalValue = prices.reduce((a, b) => a + b, 0)
 
         setStats({
@@ -171,7 +166,7 @@ async function fetchProductsFallback(filters, setProducts, setTotal, setLoading)
   const fetchLimit = perPage * 8
 
   let query = supabase
-    .from('fact_product_daily_snapshot')
+    .from('v_snapshot_timeseries')
     .select('*', { count: 'exact' })
     .order('scraped_date', { ascending: false })
 
@@ -226,7 +221,7 @@ export function useProductDetail(slug) {
       setLoading(true)
       const [snapshotRes, detailRes] = await Promise.all([
         supabase
-          .from('fact_product_daily_snapshot')
+          .from('v_snapshot_timeseries')
           .select('*')
           .eq('slug', slug)
           .order('scraped_date', { ascending: true }),
@@ -285,7 +280,7 @@ export function useCompareProducts(slugs = []) {
     async function fetch() {
       setLoading(true)
       const { data } = await supabase
-        .from('fact_product_daily_snapshot')
+        .from('v_snapshot_timeseries')
         .select('*')
         .in('slug', slugs)
         .order('scraped_date', { ascending: false })
@@ -364,7 +359,7 @@ export function useAvailabilityStatuses() {
   const [statuses, setStatuses] = useState([])
   useEffect(() => {
     async function fetch() {
-      const { data } = await supabase.from('fact_product_daily_snapshot').select('availability_status')
+      const { data } = await supabase.from('v_latest_products').select('availability_status')
       const unique = [...new Set((data || []).map(d => d.availability_status).filter(Boolean))]
       setStatuses(unique.sort())
     }
@@ -377,8 +372,8 @@ export function useAgeRanges() {
   const [ranges, setRanges] = useState([])
   useEffect(() => {
     async function fetch() {
-      const { data } = await supabase.from('fact_product_daily_snapshot').select('age_range')
-      const unique = [...new Set((data || []).map(d => d.age_range).filter(Boolean))]
+      const { data } = await supabase.from('v_latest_products').select('age_range, enriched_age_range')
+      const unique = [...new Set((data || []).map(d => d.enriched_age_range || d.age_range).filter(Boolean))]
       setRanges(unique.sort())
     }
     fetch()
@@ -393,16 +388,17 @@ export function useAllSnapshots() {
 
   useEffect(() => {
     async function fetch() {
-      // Fetch all snapshot rows — we need them for time-series
+      // Fetch snapshots in small pages to avoid Supabase statement timeout
       let allData = []
       let from = 0
-      const pageSize = 2000
+      const pageSize = 500
       let keepGoing = true
 
       while (keepGoing) {
         const { data, error } = await supabase
-          .from('fact_product_daily_snapshot')
+          .from('v_snapshot_timeseries')
           .select('product_code, product_name, theme, price_usd, piece_count, rating, in_stock, on_sale, is_new, availability_status, age_range, scraped_date, price_per_piece, vip_points, discount_usd, list_price_usd, sale_percentage, slug')
+          .order('product_code', { ascending: true })
           .order('scraped_date', { ascending: true })
           .range(from, from + pageSize - 1)
 
@@ -431,16 +427,17 @@ export function useAlerts() {
 
   useEffect(() => {
     async function fetch() {
-      // Fetch all snapshots
+      // Fetch all snapshots in small pages to avoid timeout
       let allData = []
       let from = 0
-      const pageSize = 2000
+      const pageSize = 500
       let keepGoing = true
 
       while (keepGoing) {
         const { data, error } = await supabase
-          .from('fact_product_daily_snapshot')
+          .from('v_snapshot_timeseries')
           .select('product_code, product_name, theme, price_usd, list_price_usd, in_stock, on_sale, is_new, availability_status, scraped_date, slug, piece_count, rating, discount_usd, sale_percentage')
+          .order('product_code', { ascending: true })
           .order('scraped_date', { ascending: true })
           .range(from, from + pageSize - 1)
 
@@ -618,21 +615,17 @@ export function useMostExpensiveSets(limit = 20) {
   useEffect(() => {
     async function fetch() {
       const { data } = await supabase
-        .from('fact_product_daily_snapshot')
+        .from('v_latest_products')
         .select('*')
-        .order('scraped_date', { ascending: false })
-        .limit(2000)
+        .order('enriched_price_usd', { ascending: false, nullsFirst: false })
+        .limit(limit)
 
       if (data) {
-        const seen = new Map()
-        for (const row of data) {
-          if (!seen.has(row.product_code)) seen.set(row.product_code, row)
-        }
-        const sorted = Array.from(seen.values())
-          .filter(p => p.price_usd)
-          .sort((a, b) => Number(b.price_usd) - Number(a.price_usd))
-          .slice(0, limit)
-        setProducts(sorted)
+        const enriched = data.map(row => ({
+          ...row,
+          price_usd: row.enriched_price_usd || row.price_usd,
+        }))
+        setProducts(enriched)
       }
       setLoading(false)
     }
