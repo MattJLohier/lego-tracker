@@ -44,7 +44,7 @@ export default function Reports() {
     setPreviewHtml(null)
     setPreviewLabel(label || 'Report Preview')
     setTab('preview')
-    const r = await hook.previewReport(idOrType)
+    const r = await api.previewReport(idOrType)
     setPreviewHtml(
       r?.html ||
       '<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Preview unavailable — pipeline server offline</div>'
@@ -95,7 +95,12 @@ export default function Reports() {
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setTab(id)}
+              onClick={() => {
+                setTab(id)
+                if (id === 'preview' && !previewHtml) {
+                  handleQuickPreview('daily')
+                }
+              }}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                 tab === id
                   ? 'bg-lego-red text-white shadow-lg shadow-lego-red/20'
@@ -260,7 +265,7 @@ function ProfilesTab({ user, hook, onPreview }) {
               <div className="flex items-center gap-3 text-[10px] text-gray-500 flex-wrap">
                 <span className="flex items-center gap-1"><Mail size={10} />{prof.email}</span>
                 <span className="flex items-center gap-1"><Clock size={10} />{prof.freq || prof.frequency || 'daily'}</span>
-                <span>{prof.length || 'standard'}</span>
+                <span>{(prof.max_items_per_section <= 5) ? 'brief' : (prof.max_items_per_section >= 15) ? 'detailed' : 'standard'}</span>
                 {prof.theme_filter && <span className="flex items-center gap-1"><Filter size={10} />{prof.theme_filter}</span>}
               </div>
             </div>
@@ -299,10 +304,12 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel }) {
 
   const toggleSection = (key) => setSections(prev => prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key])
 
+  const lengthToMaxItems = { brief: 5, standard: 10, detailed: 15 }
+
   const handleCreate = async () => {
     if (!name || !email || sections.length === 0) return
     setSubmitting(true)
-    await onCreate({ name, email, freq, length, sections, theme_filter: themeFilter || null, active: true })
+    await onCreate({ name, email, frequency: freq, max_items: lengthToMaxItems[length] || 10, sections, themes: themeFilter ? [themeFilter] : null, active: true })
     setSubmitting(false)
   }
 
