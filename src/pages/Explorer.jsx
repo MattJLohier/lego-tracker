@@ -5,6 +5,7 @@ import ProductCard from '../components/ProductCard'
 import { useProducts, useProductHistories, useThemeList, useAvailabilityStatuses, useAgeRanges } from '../hooks/useData'
 import { useFavorites } from '../hooks/useFavorites'
 import { useAuth } from '../hooks/useAuth'
+import { trackSearch, trackFilterApplied } from '../lib/analytics'
 
 const SORT_OPTIONS = [
   { value: 'price_usd-asc', label: 'Price: Low → High' },
@@ -85,6 +86,13 @@ export default function Explorer() {
   const { products, loading, total } = useProducts(filters)
   const productCodes = products.map(p => p.product_code)
   const { histories } = useProductHistories(productCodes)
+
+  // Track searches
+  useEffect(() => {
+    if (debouncedSearch && !loading) {
+      trackSearch(debouncedSearch, total)
+    }
+  }, [debouncedSearch, total, loading])
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 

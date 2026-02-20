@@ -1,7 +1,8 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import {
   BarChart3, DollarSign, Package, Star, ShoppingBag, TrendingDown, Layers, Tag, Zap,
-  Clock, GripVertical, Plus, X, ChevronDown, PieChart as PieIcon, LineChart as LineIcon, BarChart as BarIcon
+  Clock, GripVertical, Plus, X, ChevronDown, PieChart as PieIcon, LineChart as LineIcon, BarChart as BarIcon,
+  Save, FolderOpen, Trash2, Edit2, Check, BookOpen
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
@@ -9,6 +10,9 @@ import {
 } from 'recharts'
 import AnimatedCounter from '../components/AnimatedCounter'
 import { useStats, useThemes, useBestValue, useNewProducts, useAllSnapshots, useMostExpensiveSets } from '../hooks/useData'
+import { useSavedDashboards } from '../hooks/useSavedDashboards'
+import { trackTabSwitch, trackChartCreated, trackDashboardSaved } from '../lib/analytics'
+import { normalizeStatus, getStatusInfo } from '../lib/stockStatus'
 
 const CHART_COLORS = ['#E3000B', '#FFD500', '#006CB7', '#00963F', '#FF6B6B', '#a78bfa', '#f97316', '#06b6d4', '#ec4899', '#84cc16', '#f59e0b', '#8b5cf6', '#14b8a6', '#ef4444', '#6366f1', '#22c55e']
 const TOOLTIP_STYLE = { background: '#16161F', border: '1px solid #2A2A3D', borderRadius: '8px', fontSize: '11px' }
@@ -17,6 +21,7 @@ const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
   { id: 'timeseries', label: 'Time Series', icon: Clock },
   { id: 'custom', label: 'Custom Builder', icon: Plus },
+  { id: 'saved', label: 'Saved Reports', icon: BookOpen },
 ]
 
 export default function Analytics() {
@@ -27,6 +32,12 @@ export default function Analytics() {
   const { products: newProducts, loading: nL } = useNewProducts(10)
   const { snapshots, loading: snapL } = useAllSnapshots()
   const { products: expensiveSets, loading: eL } = useMostExpensiveSets(25)
+  const savedDashboardsHook = useSavedDashboards()
+
+  const handleTabSwitch = (tab) => {
+    setActiveTab(tab)
+    trackTabSwitch(tab, 'analytics')
+  }
 
   return (
     <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
@@ -39,11 +50,11 @@ export default function Analytics() {
         </div>
 
         {/* Tab Bar */}
-        <div className="flex gap-1 mb-6 glass rounded-xl p-1 w-fit">
+        <div className="flex gap-1 mb-6 glass rounded-xl p-1 w-fit flex-wrap">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActiveTab(id)}
+              onClick={() => handleTabSwitch(id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all
                 ${activeTab === id
                   ? 'bg-lego-red text-white shadow-lg shadow-lego-red/20'
@@ -51,6 +62,11 @@ export default function Analytics() {
             >
               <Icon size={14} />
               {label}
+              {id === 'saved' && savedDashboardsHook.dashboards.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 bg-white/10 rounded-full text-[9px]">
+                  {savedDashboardsHook.dashboards.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -62,7 +78,10 @@ export default function Analytics() {
           <TimeSeriesTab snapshots={snapshots} loading={snapL} />
         )}
         {activeTab === 'custom' && (
-          <CustomBuilderTab snapshots={snapshots} loading={snapL} />
+          <CustomBuilderTab snapshots={snapshots} loading={snapL} savedDashboardsHook={savedDashboardsHook} />
+        )}
+        {activeTab === 'saved' && (
+          <SavedReportsTab snapshots={snapshots} loading={snapL} savedDashboardsHook={savedDashboardsHook} onSwitchToBuilder={() => handleTabSwitch('custom')} />
         )}
       </div>
     </main>
@@ -177,24 +196,52 @@ function TimeSeriesTab({ snapshots, loading }) {
 
   const availabilityOverTime = useMemo(() => {
     const map = new Map()
-    const allStatuses = new Set()
+    const allCategories = new Set()
     for (const s of snapshots) {
       if (!s.scraped_date) continue
-      const status = s.availability_status || (s.in_stock ? 'In Stock' : 'Out of Stock')
-      allStatuses.add(status)
+      const category = normalizeStatus(s.availability_status, s.in_stock)
+      const info = getStatusInfo(category)
+      const label = info.label
+      allCategories.add(label)
       const key = s.scraped_date
       if (!map.has(key)) map.set(key, {})
       const obj = map.get(key)
-      obj[status] = (obj[status] || 0) + 1
+      obj[label] = (obj[label] || 0) + 1
     }
-    const statuses = [...allStatuses].sort()
+    const statuses = [...allCategories].sort()
+    // Build a color map for the normalized statuses
+    const statusColorMap = {}
+    for (const s of allCategories) {
+      const match = Object.values({
+        'In Stock': '#34d399',
+        'Pre-Order': '#fbbf24',
+        'Backorder': '#f97316',
+        'Temporarily Unavailable': '#f97316',
+        'Out of Stock': '#f87171',
+        'Retiring Soon': '#fb923c',
+        'Discontinued': '#ef4444',
+        'Unknown': '#6b7280',
+      })
+      // Map label to color
+      statusColorMap[s] = {
+        'In Stock': '#34d399',
+        'Pre-Order': '#fbbf24',
+        'Backorder': '#f97316',
+        'Temporarily Unavailable': '#f97316',
+        'Out of Stock': '#f87171',
+        'Retiring Soon': '#fb923c',
+        'Discontinued': '#ef4444',
+        'Unknown': '#6b7280',
+      }[s] || CHART_COLORS[statuses.indexOf(s) % CHART_COLORS.length]
+    }
     return {
       data: Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([date, obj]) => {
         const row = { date: fmtDate(date) }
         for (const s of statuses) row[s] = obj[s] || 0
         return row
       }),
-      statuses
+      statuses,
+      colorMap: statusColorMap,
     }
   }, [snapshots])
 
@@ -211,6 +258,47 @@ function TimeSeriesTab({ snapshots, loading }) {
     }))
   }, [snapshots])
 
+  // ─── Market-level KPI Time Series ───
+  const marketMetrics = useMemo(() => {
+    const byDate = new Map()
+    for (const s of snapshots) {
+      if (!s.scraped_date) continue
+      const d = s.scraped_date
+      if (!byDate.has(d)) byDate.set(d, { prices: [], pieces: [], ratings: [], themes: new Set(), codes: new Set(), inStock: 0, total: 0, onSale: 0, isNew: 0 })
+      const b = byDate.get(d)
+      b.codes.add(s.product_code)
+      b.total++
+      if (s.theme) b.themes.add(s.theme)
+      const price = Number(s.price_usd)
+      if (price > 0) b.prices.push(price)
+      const pc = Number(s.piece_count)
+      if (pc > 0) b.pieces.push(pc)
+      const rating = Number(s.avg_rating || s.rating)
+      if (rating > 0) b.ratings.push(rating)
+      if (s.in_stock) b.inStock++
+      if (s.is_on_sale || s.sale_percentage > 0) b.onSale++
+      if (s.is_new) b.isNew++
+    }
+    const median = (arr) => { if (!arr.length) return 0; const sorted = [...arr].sort((a, b) => a - b); const mid = Math.floor(sorted.length / 2); return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2 }
+    const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+    return Array.from(byDate.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([date, b]) => ({
+      date: fmtDate(date),
+      totalProducts: b.codes.size,
+      uniqueThemes: b.themes.size,
+      avgPrice: Math.round(avg(b.prices) * 100) / 100,
+      medianPrice: Math.round(median(b.prices) * 100) / 100,
+      totalValue: Math.round(b.prices.reduce((a, c) => a + c, 0)),
+      avgPieces: Math.round(avg(b.pieces)),
+      totalPieces: b.pieces.reduce((a, c) => a + c, 0),
+      avgRating: Math.round(avg(b.ratings) * 10) / 10,
+      inStockPct: b.total > 0 ? Math.round(b.inStock / b.total * 100) : 0,
+      onSaleCount: b.onSale,
+      newCount: b.isNew,
+      minPrice: b.prices.length ? Math.min(...b.prices) : 0,
+      maxPrice: b.prices.length ? Math.max(...b.prices) : 0,
+    }))
+  }, [snapshots])
+
   return (
     <div className="space-y-5">
       {!hasTimeSeries && (
@@ -218,6 +306,24 @@ function TimeSeriesTab({ snapshots, loading }) {
           <Clock size={32} className="text-gray-600 mx-auto mb-3" />
           <h3 className="font-display font-semibold text-sm text-gray-300 mb-1">Time Series Building Up</h3>
           <p className="text-[11px] text-gray-500">Time series charts will be richer with 2+ days of tracked data. The charts below show what's available so far.</p>
+        </div>
+      )}
+
+      {/* ─── Market KPI Sparkline Grid ─── */}
+      {marketMetrics.length > 0 && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <SparklineCard data={marketMetrics} dataKey="totalProducts" label="Total Products" color="#FFD500" fmt={v => v.toLocaleString()} />
+          <SparklineCard data={marketMetrics} dataKey="uniqueThemes" label="Unique Themes" color="#006CB7" fmt={v => v} />
+          <SparklineCard data={marketMetrics} dataKey="avgPrice" label="Avg Price" color="#FFD500" fmt={v => `$${v.toFixed(2)}`} />
+          <SparklineCard data={marketMetrics} dataKey="medianPrice" label="Median Price" color="#f97316" fmt={v => `$${v.toFixed(2)}`} />
+          <SparklineCard data={marketMetrics} dataKey="totalValue" label="Catalog Value" color="#34d399" fmt={v => `$${(v/1000).toFixed(0)}k`} />
+          <SparklineCard data={marketMetrics} dataKey="totalPieces" label="Total Pieces" color="#a78bfa" fmt={v => v.toLocaleString()} />
+          <SparklineCard data={marketMetrics} dataKey="avgRating" label="Avg Rating" color="#FFD500" fmt={v => `${v.toFixed(1)}★`} />
+          <SparklineCard data={marketMetrics} dataKey="inStockPct" label="In Stock %" color="#34d399" fmt={v => `${v}%`} />
+          <SparklineCard data={marketMetrics} dataKey="onSaleCount" label="On Sale" color="#E3000B" fmt={v => v} />
+          <SparklineCard data={marketMetrics} dataKey="newCount" label="New Products" color="#006CB7" fmt={v => v} />
+          <SparklineCard data={marketMetrics} dataKey="avgPieces" label="Avg Pieces" color="#a78bfa" fmt={v => Math.round(v)} />
+          <SparklineCard data={marketMetrics} dataKey="maxPrice" label="Max Price" color="#f87171" fmt={v => `$${v.toFixed(0)}`} />
         </div>
       )}
 
@@ -291,7 +397,7 @@ function TimeSeriesTab({ snapshots, loading }) {
       </ChartCard>
 
       {availabilityOverTime.data.length > 0 && (
-        <ChartCard title="Availability Status Over Time" subtitle="Product count by availability status per day">
+        <ChartCard title="Availability Status Over Time" subtitle="Product count by availability status per day (normalized)">
           <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={availabilityOverTime.data}>
@@ -300,8 +406,11 @@ function TimeSeriesTab({ snapshots, loading }) {
                 <YAxis tick={{ fill: '#555', fontSize: 10 }} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <RLegend wrapperStyle={{ fontSize: '10px', color: '#888' }} />
-                {availabilityOverTime.statuses.map((s, i) => (
-                  <Area key={s} type="monotone" dataKey={s} stackId="1" fill={CHART_COLORS[i % CHART_COLORS.length]} stroke={CHART_COLORS[i % CHART_COLORS.length]} fillOpacity={0.6} />
+                {availabilityOverTime.statuses.map((s) => (
+                  <Area key={s} type="monotone" dataKey={s} stackId="1"
+                    fill={availabilityOverTime.colorMap[s]}
+                    stroke={availabilityOverTime.colorMap[s]}
+                    fillOpacity={0.6} />
                 ))}
               </AreaChart>
             </ResponsiveContainer>
@@ -482,21 +591,28 @@ const CHART_TYPES = [
   { key: 'pie', label: 'Pie', icon: PieIcon },
 ]
 
-function CustomBuilderTab({ snapshots, loading }) {
+function CustomBuilderTab({ snapshots, loading, savedDashboardsHook }) {
   const [charts, setCharts] = useState([
     { id: 1, metric: 'price_usd', groupBy: 'theme', agg: 'avg', chartType: 'bar', label: 'Average Price ($) by Theme' },
     { id: 2, metric: 'piece_count', groupBy: 'theme', agg: 'sum', chartType: 'bar', label: 'Sum Piece Count by Theme' },
   ])
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [saveStatus, setSaveStatus] = useState(null) // 'saving' | 'saved' | 'error'
+
+  const { saveDashboard } = savedDashboardsHook
 
   const addChart = () => {
-    setCharts(prev => [...prev, {
+    const newChart = {
       id: Date.now(),
       metric: 'price_usd',
       groupBy: 'theme',
       agg: 'avg',
       chartType: 'bar',
       label: 'Average Price ($) by Theme'
-    }])
+    }
+    setCharts(prev => [...prev, newChart])
+    trackChartCreated(newChart.metric, newChart.groupBy, newChart.agg, newChart.chartType)
   }
 
   const removeChart = (id) => setCharts(prev => prev.filter(c => c.id !== id))
@@ -539,6 +655,23 @@ function CustomBuilderTab({ snapshots, loading }) {
     return Array.from(seen.values())
   }, [snapshots])
 
+  const handleSave = async () => {
+    if (!saveName.trim()) return
+    setSaveStatus('saving')
+    try {
+      await saveDashboard(saveName.trim(), charts)
+      setSaveStatus('saved')
+      trackDashboardSaved(saveName.trim(), charts.length)
+      setTimeout(() => {
+        setSaveDialogOpen(false)
+        setSaveStatus(null)
+        setSaveName('')
+      }, 1200)
+    } catch (e) {
+      setSaveStatus('error')
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between mb-2">
@@ -546,13 +679,64 @@ function CustomBuilderTab({ snapshots, loading }) {
           <h2 className="font-display font-semibold text-sm text-gray-300">Custom Analytics Builder</h2>
           <p className="text-[10px] text-gray-500 mt-0.5">Drag to reorder charts • Pick any metric, aggregation, grouping, and chart type</p>
         </div>
-        <button
-          onClick={addChart}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-blue hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
-        >
-          <Plus size={14} /> Add Chart
-        </button>
+        <div className="flex items-center gap-2">
+          {charts.length > 0 && (
+            <button
+              onClick={() => setSaveDialogOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 glass glass-hover text-gray-300 text-xs font-semibold rounded-lg transition-colors"
+            >
+              <Save size={14} /> Save Dashboard
+            </button>
+          )}
+          <button
+            onClick={addChart}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-blue hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+          >
+            <Plus size={14} /> Add Chart
+          </button>
+        </div>
       </div>
+
+      {/* Save Dialog */}
+      {saveDialogOpen && (
+        <div className="glass rounded-xl p-5 border border-lego-blue/30 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <Save size={16} className="text-lego-blue shrink-0" />
+            <input
+              type="text"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              placeholder="Dashboard name (e.g., 'My Price Analysis')"
+              className="flex-1 bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-lego-blue"
+              autoFocus
+            />
+            <button
+              onClick={handleSave}
+              disabled={!saveName.trim() || saveStatus === 'saving'}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all
+                ${saveStatus === 'saved'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-lego-blue hover:bg-blue-700 text-white disabled:opacity-50'}`}
+            >
+              {saveStatus === 'saving' ? (
+                <span className="animate-spin w-3 h-3 border-2 border-white/30 border-t-white rounded-full" />
+              ) : saveStatus === 'saved' ? (
+                <><Check size={14} /> Saved!</>
+              ) : (
+                <><Save size={14} /> Save</>
+              )}
+            </button>
+            <button onClick={() => { setSaveDialogOpen(false); setSaveName(''); setSaveStatus(null) }}
+              className="p-2 text-gray-500 hover:text-white rounded-lg transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-500 mt-2 ml-7">
+            {charts.length} chart{charts.length !== 1 ? 's' : ''} will be saved. Find them in the Saved Reports tab.
+          </p>
+        </div>
+      )}
 
       {charts.map((chart, idx) => (
         <div
@@ -751,6 +935,176 @@ function CustomChart({ config, snapshots }) {
   )
 }
 
+/* ========================= SAVED REPORTS TAB ========================= */
+
+function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBuilder }) {
+  const { dashboards, loading: dashLoading, deleteDashboard } = savedDashboardsHook
+  const [expandedDash, setExpandedDash] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+
+  // Drag reorder state for dashboard cards
+  const dragItem = useRef(null)
+  const dragOverItem = useRef(null)
+  const [orderedDashboards, setOrderedDashboards] = useState(dashboards)
+
+  // Sync orderedDashboards with dashboards from hook
+  useMemo(() => {
+    setOrderedDashboards(dashboards)
+  }, [dashboards])
+
+  const handleDragStart = (idx) => { dragItem.current = idx }
+  const handleDragOver = (e, idx) => { e.preventDefault(); dragOverItem.current = idx }
+  const handleDrop = () => {
+    if (dragItem.current === null || dragOverItem.current === null) return
+    const copy = [...orderedDashboards]
+    const dragged = copy.splice(dragItem.current, 1)[0]
+    copy.splice(dragOverItem.current, 0, dragged)
+    setOrderedDashboards(copy)
+    dragItem.current = null
+    dragOverItem.current = null
+  }
+
+  const latestSnapshots = useMemo(() => {
+    if (!snapshots?.length) return []
+    const seen = new Map()
+    const sorted = [...snapshots].sort((a, b) => (b.scraped_date || '').localeCompare(a.scraped_date || ''))
+    for (const s of sorted) {
+      if (!seen.has(s.product_code)) seen.set(s.product_code, s)
+    }
+    return Array.from(seen.values())
+  }, [snapshots])
+
+  if (dashLoading || loading) return <LoadingSkeleton />
+
+  if (orderedDashboards.length === 0) {
+    return (
+      <div className="glass rounded-xl p-12 text-center">
+        <BookOpen size={40} className="text-gray-600 mx-auto mb-4" />
+        <h3 className="font-display font-semibold text-lg text-gray-300 mb-2">No Saved Reports Yet</h3>
+        <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+          Build custom charts in the Custom Builder tab, then save them as a dashboard to access them here anytime.
+        </p>
+        <button
+          onClick={onSwitchToBuilder}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-lego-blue hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
+          <Plus size={16} /> Create Your First Dashboard
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h2 className="font-display font-semibold text-sm text-gray-300">Saved Reports</h2>
+          <p className="text-[10px] text-gray-500 mt-0.5">
+            {orderedDashboards.length} saved dashboard{orderedDashboards.length !== 1 ? 's' : ''} • Drag to reorder • Click to expand
+          </p>
+        </div>
+        <button
+          onClick={onSwitchToBuilder}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-blue hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+        >
+          <Plus size={14} /> New Dashboard
+        </button>
+      </div>
+
+      {orderedDashboards.map((dash, idx) => (
+        <div
+          key={dash.id}
+          draggable
+          onDragStart={() => handleDragStart(idx)}
+          onDragOver={(e) => handleDragOver(e, idx)}
+          onDrop={handleDrop}
+          className="glass rounded-xl overflow-hidden transition-all"
+        >
+          {/* Dashboard Header */}
+          <div
+            className="flex items-center gap-3 p-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
+            onClick={() => setExpandedDash(expandedDash === dash.id ? null : dash.id)}
+          >
+            <div className="cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-400 transition-colors">
+              <GripVertical size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-display font-semibold text-sm text-white truncate">{dash.name}</h3>
+              <p className="text-[10px] text-gray-500 mt-0.5">
+                {dash.charts?.length || 0} chart{(dash.charts?.length || 0) !== 1 ? 's' : ''}
+                {dash.updated_at && (
+                  <span className="ml-2">
+                    · Saved {new Date(dash.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              {/* Chart type thumbnails */}
+              <div className="flex gap-0.5 mr-2">
+                {(dash.charts || []).slice(0, 5).map((c, i) => {
+                  const ChartIcon = { bar: BarIcon, line: LineIcon, area: BarChart3, pie: PieIcon }[c.chartType] || BarIcon
+                  return <ChartIcon key={i} size={11} className="text-gray-600" />
+                })}
+                {(dash.charts?.length || 0) > 5 && (
+                  <span className="text-[9px] text-gray-600">+{dash.charts.length - 5}</span>
+                )}
+              </div>
+              {confirmDelete === dash.id ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteDashboard(dash.id); setConfirmDelete(null) }}
+                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-semibold rounded-md transition-colors"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmDelete(null) }}
+                    className="px-2 py-1 glass text-gray-400 text-[10px] font-semibold rounded-md transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(dash.id) }}
+                  className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+              <ChevronDown
+                size={16}
+                className={`text-gray-500 transition-transform ${expandedDash === dash.id ? 'rotate-180' : ''}`}
+              />
+            </div>
+          </div>
+
+          {/* Expanded Charts */}
+          {expandedDash === dash.id && (
+            <div className="border-t border-lego-border/50">
+              {(dash.charts || []).map((chart, cIdx) => (
+                <div key={chart.id || cIdx} className="p-5 border-b border-lego-border/30 last:border-b-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[9px] font-mono text-gray-600 bg-lego-surface2 px-1.5 py-0.5 rounded">
+                      {cIdx + 1}/{dash.charts.length}
+                    </span>
+                  </div>
+                  <h4 className="font-display font-semibold text-sm mb-1 text-white">{chart.label}</h4>
+                  <p className="text-[10px] text-gray-500 mb-4">
+                    {AGG_FUNCTIONS.find(f => f.key === chart.agg)?.label} of {NUMERIC_FIELDS.find(f => f.key === chart.metric)?.label} grouped by {GROUP_BY_FIELDS.find(f => f.key === chart.groupBy)?.label}
+                  </p>
+                  <CustomChart config={chart} snapshots={chart.groupBy === 'scraped_date' ? snapshots : latestSnapshots} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ========================= SHARED COMPONENTS ========================= */
 
 function ChartCard({ title, subtitle, children }) {
@@ -783,6 +1137,41 @@ function LoadingSkeleton() {
           <div className="h-[300px] bg-lego-surface2 rounded" />
         </div>
       ))}
+    </div>
+  )
+}
+
+function SparklineCard({ data, dataKey, label, color, fmt }) {
+  if (!data || data.length === 0) return null
+  const latest = data[data.length - 1]?.[dataKey]
+  const first = data[0]?.[dataKey]
+  const change = first > 0 ? ((latest - first) / first * 100) : 0
+  const isUp = change > 0
+  return (
+    <div className="glass rounded-xl p-4 glass-hover transition-all">
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-[10px] font-mono uppercase tracking-wider text-gray-500">{label}</div>
+        {data.length > 1 && change !== 0 && (
+          <span className={`text-[10px] font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+            {isUp ? '+' : ''}{change.toFixed(1)}%
+          </span>
+        )}
+      </div>
+      <div className="font-display font-bold text-lg mb-2" style={{ color }}>{fmt(latest)}</div>
+      <div className="h-[60px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id={`grad-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <Area type="monotone" dataKey={dataKey} stroke={color} fill={`url(#grad-${dataKey})`} strokeWidth={1.5} dot={false} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [fmt(v), label]} labelFormatter={l => l} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }

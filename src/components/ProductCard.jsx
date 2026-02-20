@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Star, Package, Tag, TrendingDown, TrendingUp, Minus, Heart, ExternalLink, Clock, ShoppingBag } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useMemo } from 'react'
+import { getStatusDisplay, isStatusInStock } from '../lib/stockStatus'
 
 function legoStoreUrl(product) {
   if (product.product_url) return product.product_url
@@ -51,7 +52,7 @@ function StockBar({ data, height = 6 }) {
         <div
           key={i}
           className="flex-1"
-          style={{ backgroundColor: d.inStock ? '#34d399' : '#f87171', opacity: 0.8 }}
+          style={{ backgroundColor: d.color || (d.inStock ? '#34d399' : '#f87171'), opacity: 0.8 }}
         />
       ))}
     </div>
@@ -84,7 +85,11 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
       .filter(h => h.price_usd && Number(h.price_usd) > 0)
       .map(h => ({ value: Number(h.price_usd) }))
 
-    const stockData = history.map(h => ({ inStock: !!h.in_stock }))
+    const stockData = history.map(h => {
+      const available = isStatusInStock(h.availability_status, h.in_stock)
+      const statusInfo = getStatusDisplay(h.availability_status, h.in_stock)
+      return { inStock: available, color: statusInfo.color }
+    })
 
     const first = history[0]
     const last = history[history.length - 1]
@@ -97,7 +102,7 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
     const priceChange = lastPrice - firstPrice
     const priceChangePct = firstPrice > 0 ? ((priceChange / firstPrice) * 100) : 0
 
-    const daysInStock = history.filter(h => h.in_stock).length
+    const daysInStock = history.filter(h => isStatusInStock(h.availability_status, h.in_stock)).length
     const daysTotal = history.length
 
     return { priceData, stockData, daysTracked, priceChange, priceChangePct, daysInStock, daysTotal }
@@ -169,10 +174,17 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
 
           {/* Stock dot + label bottom-left */}
           <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${in_stock ? 'bg-green-400 shadow-green-400/50 shadow-sm' : 'bg-red-400 shadow-red-400/50 shadow-sm'}`} />
-            <span className={`text-[9px] font-semibold ${in_stock ? 'text-green-400' : 'text-red-400'}`}>
-              {availability_status || (in_stock ? 'In Stock' : 'Out of Stock')}
-            </span>
+            {(() => {
+              const statusInfo = getStatusDisplay(availability_status, in_stock)
+              return (
+                <>
+                  <div className={`w-2 h-2 rounded-full shadow-sm ${statusInfo.dotClass}`} style={{ boxShadow: `0 0 4px ${statusInfo.color}40` }} />
+                  <span className={`text-[9px] font-semibold ${statusInfo.textClass}`}>
+                    {statusInfo.displayLabel}
+                  </span>
+                </>
+              )
+            })()}
           </div>
         </div>
 

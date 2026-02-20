@@ -4,7 +4,9 @@ import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, A
 import { useProductDetail } from '../hooks/useData'
 import { useFavorites } from '../hooks/useFavorites'
 import { useAuth } from '../hooks/useAuth'
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
+import { getStatusDisplay, isStatusInStock, getStatusChartColor } from '../lib/stockStatus'
+import { trackProductView } from '../lib/analytics'
 
 const TOOLTIP_STYLE = { background: '#16161F', border: '1px solid #2A2A3D', borderRadius: '8px', fontSize: '12px' }
 
@@ -39,21 +41,25 @@ export default function ProductDetail() {
     for (let i = 1; i < history.length; i++) {
       const prev = history[i - 1]
       const curr = history[i]
-      const prevStatus = prev.availability_status || (prev.in_stock ? 'Available' : 'Out of Stock')
-      const currStatus = curr.availability_status || (curr.in_stock ? 'Available' : 'Out of Stock')
-      if (prevStatus !== currStatus) {
-        changes.push({ from: prevStatus, to: currStatus, date: curr.scraped_date })
+      const prevDisplay = getStatusDisplay(prev.availability_status, prev.in_stock)
+      const currDisplay = getStatusDisplay(curr.availability_status, curr.in_stock)
+      if (prevDisplay.category !== currDisplay.category) {
+        changes.push({ from: prevDisplay.displayLabel, to: currDisplay.displayLabel, date: curr.scraped_date })
       }
     }
     return changes
   }, [history])
 
   const stockChartData = useMemo(() => {
-    return history.map(h => ({
-      date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      status: h.availability_status || (h.in_stock ? 'Available' : 'Out of Stock'),
-      inStock: h.in_stock ? 1 : 0,
-    }))
+    return history.map(h => {
+      const statusInfo = getStatusDisplay(h.availability_status, h.in_stock)
+      return {
+        date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        status: statusInfo.displayLabel,
+        inStock: statusInfo.isAvailable ? 1 : 0,
+        color: statusInfo.color,
+      }
+    })
   }, [history])
 
   if (loading) return (
@@ -85,8 +91,8 @@ export default function ProductDetail() {
     availability_status, vip_points, sale_percentage, featured_flags, scraped_date,
   } = product
 
-  const imageUrl = product.image_url || product.img_url || product.primary_image_url
-    || product.thumbnail_url || product.image || product.product_image_url || null
+  const imageUrl = product._resolved_image_url || product.image_url || product.img_url || product.primary_image_url
+    || product.thumbnail_url || product.image || product.product_image_url || product.enriched_image_url || null
 
   const storeUrl = legoStoreUrl(product)
 
@@ -99,6 +105,13 @@ export default function ProductDetail() {
   const currentPrice = Number(price_usd)
   const priceChange = currentPrice - firstPrice
   const priceChangePct = firstPrice > 0 ? ((priceChange / firstPrice) * 100).toFixed(1) : 0
+
+  // Track product view
+  useEffect(() => {
+    if (product_name) {
+      trackProductView(slug, product_name, theme, currentPrice)
+    }
+  }, [slug, product_name])
 
   const chartData = history.map(h => ({
     date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -147,7 +160,9 @@ export default function ProductDetail() {
             <div className="grid grid-cols-2 gap-2">
               <MiniStat icon={<Clock size={13} />} label="Days Tracked" value={daysTracked} />
               <MiniStat icon={<CalendarDays size={13} />} label="First Seen" value={firstSeen ? new Date(firstSeen).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} />
-              <MiniStat icon={<ShoppingBag size={13} />} label="Status" value={availability_status || (in_stock ? 'In Stock' : 'Out of Stock')} color={in_stock ? 'text-green-400' : 'text-red-400'} />
+              <MiniStat icon={<ShoppingBag size={13} />} label="Status" 
+                value={getStatusDisplay(availability_status, in_stock).displayLabel} 
+                color={getStatusDisplay(availability_status, in_stock).textClass} />
               <MiniStat icon={<Star size={13} />} label="VIP Points" value={vip_points || '—'} />
             </div>
 
@@ -296,7 +311,7 @@ export default function ProductDetail() {
             {stockChartData.length > 1 && (
               <div className="glass rounded-xl p-5">
                 <h3 className="font-display font-semibold text-sm mb-1">Stock Availability Over Time</h3>
-                <p className="text-[10px] text-gray-500 mb-4">Green = in stock · Red = out of stock</p>
+                <p className="text-[10px] text-gray-500 mb-4">Green = available · Orange = backorder/limited · Red = out of stock</p>
                 <div className="h-[80px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stockChartData} barCategoryGap={0}>
@@ -308,14 +323,14 @@ export default function ProductDetail() {
                           return (
                             <div className="glass rounded-lg p-2 border border-lego-border text-xs">
                               <div className="text-white font-semibold">{d.date}</div>
-                              <div className={d.inStock ? 'text-green-400' : 'text-red-400'}>{d.status}</div>
+                              <div style={{ color: d.color }}>{d.status}</div>
                             </div>
                           )
                         }}
                       />
                       <Bar dataKey="inStock" radius={[2, 2, 0, 0]}>
                         {stockChartData.map((entry, idx) => (
-                          <Cell key={idx} fill={entry.inStock ? '#34d399' : '#f87171'} />
+                          <Cell key={idx} fill={entry.color} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -334,11 +349,7 @@ export default function ProductDetail() {
                     {statusTimeline.map((change, i) => (
                       <div key={i} className="flex items-start gap-3 pl-1">
                         <div className="relative z-10 w-5 h-5 rounded-full bg-lego-surface2 border-2 border-lego-border flex items-center justify-center shrink-0 mt-0.5">
-                          <div className={`w-2 h-2 rounded-full ${
-                            /available|in stock/i.test(change.to) ? 'bg-green-400' :
-                            /retir|discontinu/i.test(change.to) ? 'bg-red-400' :
-                            'bg-lego-yellow'
-                          }`} />
+                        <div className={`w-2 h-2 rounded-full ${getStatusDisplay(change.to).dotClass}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -386,18 +397,10 @@ export default function ProductDetail() {
 }
 
 function StatusBadge({ status }) {
-  const colors = {
-    'Available': 'bg-green-500/15 text-green-400 border-green-500/30',
-    'In Stock': 'bg-green-500/15 text-green-400 border-green-500/30',
-    'Out of Stock': 'bg-red-500/15 text-red-400 border-red-500/30',
-    'Retiring Soon': 'bg-orange-500/15 text-orange-400 border-orange-500/30',
-    'Sold Out': 'bg-red-500/15 text-red-400 border-red-500/30',
-  }
-  const defaultColor = 'bg-gray-500/15 text-gray-400 border-gray-500/30'
-  const color = Object.entries(colors).find(([key]) => status?.toLowerCase()?.includes(key.toLowerCase()))?.[1] || defaultColor
+  const info = getStatusDisplay(status)
   return (
-    <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full border ${color} whitespace-nowrap`}>
-      {status || 'Unknown'}
+    <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full border ${info.bgClass} ${info.textClass} ${info.borderClass} whitespace-nowrap`}>
+      {info.displayLabel}
     </span>
   )
 }
