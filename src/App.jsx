@@ -10,6 +10,7 @@ import Reports from './pages/Reports'
 import Watchlist from './pages/Watchlist'
 import Compare from './pages/Compare'
 import AuthPage from './pages/AuthPage'
+import AccountPage from './pages/AccountPage'
 import { trackPageView } from './lib/analytics'
 
 function RouteTracker() {
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/watchlist" element={<Watchlist />} />
         <Route path="/compare" element={<Compare />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/account" element={<AccountPage />} />
       </Routes>
     </>
   )

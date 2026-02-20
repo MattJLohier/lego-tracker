@@ -1,40 +1,48 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as api from '../lib/api'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 // ─── Alert Subscriptions ───────────────────────────
 
 export function useAlertSubscriptions() {
+  const { user } = useAuth()
   const [subscriptions, setSubscriptions] = useState([])
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
-  const [apiAvailable, setApiAvailable] = useState(null) // null = unknown
+  const [apiAvailable, setApiAvailable] = useState(null)
 
   const load = useCallback(async () => {
+    if (!user) {
+      setSubscriptions([])
+      setHistory([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
-    // Try pipeline API first
-    const subs = await api.getAlertSubscriptions()
+    // Try pipeline API first — scoped to user email
+    const subs = await api.getAlertSubscriptions(user.email)
     if (subs !== null) {
       setApiAvailable(true)
       setSubscriptions(Array.isArray(subs) ? subs : subs?.subscriptions || [])
-      const hist = await api.getAlertHistory(50)
+      const hist = await api.getAlertHistory(50, user.email)
       setHistory(Array.isArray(hist) ? hist : hist?.history || [])
     } else {
-      // Fallback: try Supabase direct
+      // Fallback: try Supabase direct — scoped to user email
       setApiAvailable(false)
       try {
-        const { data } = await supabase.from('alert_subscriptions').select('*').order('created_at', { ascending: false })
+        const { data } = await supabase.from('alert_subscriptions').select('*').eq('email', user.email).order('created_at', { ascending: false })
         setSubscriptions(data || [])
-        const { data: histData } = await supabase.from('alert_history').select('*').order('fired_at', { ascending: false }).limit(50)
+        const { data: histData } = await supabase.from('alert_history').select('*').eq('email', user.email).order('fired_at', { ascending: false }).limit(50)
         setHistory(histData || [])
       } catch {
-        // Tables don't exist yet
         setSubscriptions([])
         setHistory([])
       }
     }
     setLoading(false)
-  }, [])
+  }, [user])
 
   useEffect(() => { load() }, [load])
 
@@ -64,14 +72,22 @@ export function useAlertSubscriptions() {
 // ─── Report Profiles ───────────────────────────────
 
 export function useReportProfiles() {
+  const { user } = useAuth()
   const [profiles, setProfiles] = useState([])
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [apiAvailable, setApiAvailable] = useState(null)
 
   const load = useCallback(async () => {
+    if (!user) {
+      setProfiles([])
+      setHistory([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
-    const profs = await api.getReportProfiles()
+    const profs = await api.getReportProfiles(user.email)
     if (profs !== null) {
       setApiAvailable(true)
       setProfiles(Array.isArray(profs) ? profs : profs?.profiles || [])
@@ -80,7 +96,7 @@ export function useReportProfiles() {
     } else {
       setApiAvailable(false)
       try {
-        const { data } = await supabase.from('report_profiles').select('*').order('created_at', { ascending: false })
+        const { data } = await supabase.from('report_profiles').select('*').eq('email', user.email).order('created_at', { ascending: false })
         setProfiles(data || [])
         const { data: histData } = await supabase.from('report_history').select('*').order('generated_at', { ascending: false }).limit(20)
         setHistory(histData || [])
@@ -90,7 +106,7 @@ export function useReportProfiles() {
       }
     }
     setLoading(false)
-  }, [])
+  }, [user])
 
   useEffect(() => { load() }, [load])
 

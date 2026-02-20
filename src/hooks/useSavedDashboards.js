@@ -21,38 +21,34 @@ export function useSavedDashboards() {
   const loadDashboards = useCallback(async () => {
     setLoading(true)
 
-    if (user) {
-      // Try Supabase first
-      try {
-        const { data, error } = await supabase
-          .from('saved_dashboards')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('updated_at', { ascending: false })
-
-        if (!error && data) {
-          setDashboards(data.map(d => ({
-            ...d,
-            charts: typeof d.charts === 'string' ? JSON.parse(d.charts) : d.charts,
-          })))
-          setLoading(false)
-          return
-        }
-      } catch (e) {
-        // Table might not exist yet — fall through to localStorage
-        console.warn('saved_dashboards table not available, using localStorage:', e.message)
-      }
+    if (!user) {
+      // Not logged in — no dashboards available
+      setDashboards([])
+      setLoading(false)
+      return
     }
 
-    // Fallback: localStorage
+    // Try Supabase
     try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEY)
-      if (stored) {
-        setDashboards(JSON.parse(stored))
+      const { data, error } = await supabase
+        .from('saved_dashboards')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+
+      if (!error && data) {
+        setDashboards(data.map(d => ({
+          ...d,
+          charts: typeof d.charts === 'string' ? JSON.parse(d.charts) : d.charts,
+        })))
+        setLoading(false)
+        return
       }
     } catch (e) {
-      console.warn('Failed to load dashboards from localStorage:', e)
+      console.warn('saved_dashboards table not available:', e.message)
     }
+
+    setDashboards([])
     setLoading(false)
   }, [user])
 
@@ -62,6 +58,8 @@ export function useSavedDashboards() {
 
   // Save a new dashboard or update an existing one
   const saveDashboard = useCallback(async (name, charts, existingId = null) => {
+    if (!user) return null // Must be logged in
+
     const now = new Date().toISOString()
     const dashboard = {
       id: existingId || `dash_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -71,44 +69,29 @@ export function useSavedDashboards() {
       updated_at: now,
     }
 
-    if (user) {
-      try {
-        const payload = {
-          id: dashboard.id,
-          user_id: user.id,
-          name: dashboard.name,
-          charts: JSON.stringify(charts),
-          updated_at: now,
-        }
-        if (!existingId) payload.created_at = now
-
-        const { error } = existingId
-          ? await supabase.from('saved_dashboards').update(payload).eq('id', existingId)
-          : await supabase.from('saved_dashboards').insert(payload)
-
-        if (!error) {
-          await loadDashboards()
-          return dashboard.id
-        }
-      } catch (e) {
-        console.warn('Supabase save failed, using localStorage:', e.message)
+    try {
+      const payload = {
+        id: dashboard.id,
+        user_id: user.id,
+        name: dashboard.name,
+        charts: JSON.stringify(charts),
+        updated_at: now,
       }
+      if (!existingId) payload.created_at = now
+
+      const { error } = existingId
+        ? await supabase.from('saved_dashboards').update(payload).eq('id', existingId)
+        : await supabase.from('saved_dashboards').insert(payload)
+
+      if (!error) {
+        await loadDashboards()
+        return dashboard.id
+      }
+    } catch (e) {
+      console.warn('Supabase save failed:', e.message)
     }
 
-    // Fallback: localStorage
-    setDashboards(prev => {
-      const updated = existingId
-        ? prev.map(d => d.id === existingId ? { ...d, name, charts, updated_at: now } : d)
-        : [{ ...dashboard, created_at: now }, ...prev]
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated))
-      } catch (e) {
-        console.warn('localStorage save failed:', e)
-      }
-      return updated
-    })
-
-    return dashboard.id
+    return null
   }, [user, loadDashboards])
 
   // Delete a dashboard
@@ -120,16 +103,7 @@ export function useSavedDashboards() {
         // Ignore
       }
     }
-
-    setDashboards(prev => {
-      const updated = prev.filter(d => d.id !== id)
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated))
-      } catch (e) {
-        // Ignore
-      }
-      return updated
-    })
+    setDashboards(prev => prev.filter(d => d.id !== id))
   }, [user])
 
   return {

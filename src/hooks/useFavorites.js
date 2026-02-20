@@ -42,6 +42,7 @@ export function useFavorites() {
 
   const toggleFavorite = async (productCode, slug) => {
     if (!user) return false
+    // Adding — check handled at component level
     if (favorites.has(productCode)) {
       await supabase.from('user_favorites')
         .delete()

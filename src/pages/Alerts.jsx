@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Bell, TrendingUp, TrendingDown, Sparkles, AlertTriangle, ShoppingBag,
   ArrowRight, Tag, Package, Flame, Clock, BarChart3, ExternalLink,
-  Plus, X, Mail, Trash2, Zap
+  Plus, X, Mail, Trash2, Zap, Lock, Crown
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -12,9 +12,11 @@ import {
 import { useAlerts } from '../hooks/useAlerts'
 import { useAlertSubscriptions } from '../hooks/usePipeline'
 import { useAuth } from '../hooks/useAuth'
+import { useSubscription } from '../hooks/useSubscription'
 import { useThemeList } from '../hooks/useData'
 import { getStatusDisplay } from '../lib/stockStatus'
 import ProductSearchInput from '../components/ProductSearchInput'
+import { UpgradeModal, UpgradeBanner, UsageMeter } from '../components/UpgradeModal'
 import { supabase } from '../lib/supabase'
 
 
@@ -44,12 +46,12 @@ const TABS = [
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '' }
 function fmtDateLong(d) { return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '' }
 function fmtTime(d) { return d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '' }
-function legoStoreUrl(pc) { return pc ? `https://www.lego.com/en-us/product/${pc}` : null }
 
 export default function Alerts() {
   const [activeTab, setActiveTab] = useState('subscriptions')
   const { alerts, loading: alertsLoading } = useAlerts()
   const { user } = useAuth()
+  const [showUpgrade, setShowUpgrade] = useState(false)
 
   return (
     <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
@@ -71,7 +73,7 @@ export default function Alerts() {
             </button>
           ))}
         </div>
-        {activeTab === 'subscriptions' && <SubscriptionsTab user={user} />}
+        {activeTab === 'subscriptions' && <SubscriptionsTab user={user} onUpgrade={() => setShowUpgrade(true)} />}
         {activeTab === 'history' && <AlertHistoryTab />}
         {activeTab === 'overview' && alerts && <OverviewTab alerts={alerts} />}
         {activeTab === 'prices' && alerts && <PriceSwingsTab swings={alerts.priceSwings} />}
@@ -79,15 +81,18 @@ export default function Alerts() {
         {activeTab === 'sales' && alerts && <SalesTab sales={alerts.newSales} />}
         {!['subscriptions', 'history'].includes(activeTab) && alertsLoading && <LoadingSkeleton />}
       </div>
+
+      <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} feature="More alerts" />
     </main>
   )
 }
 
-function SubscriptionsTab({ user }) {
+function SubscriptionsTab({ user, onUpgrade }) {
   const { subscriptions, loading, createSubscription, deleteSubscription, apiAvailable } = useAlertSubscriptions()
+  const sub = useSubscription()
   const [showForm, setShowForm] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [productNames, setProductNames] = useState({}) // product_code → product_name
+  const [productNames, setProductNames] = useState({})
   const themes = useThemeList()
 
   // Resolve product names for subscriptions that only have product_code
@@ -119,6 +124,7 @@ function SubscriptionsTab({ user }) {
       })
   }, [subscriptions])
 
+  // Not logged in at all
   if (!user) return (
     <div className="glass rounded-xl p-10 text-center">
       <Bell size={40} className="text-gray-600 mx-auto mb-4" />
@@ -127,6 +133,14 @@ function SubscriptionsTab({ user }) {
       <Link to="/auth" className="inline-flex items-center gap-2 px-5 py-2.5 bg-lego-red hover:bg-red-700 text-white text-sm font-semibold rounded-xl transition-colors">Sign In</Link>
     </div>
   )
+
+  const handleNewAlert = () => {
+    if (!sub.canCreateAlert) {
+      onUpgrade()
+      return
+    }
+    setShowForm(true)
+  }
 
   return (
     <div className="space-y-5">
@@ -138,33 +152,45 @@ function SubscriptionsTab({ user }) {
           </div>
           <p className="text-[10px] text-gray-500 mt-0.5">{subscriptions.length} active alert{subscriptions.length !== 1 ? 's' : ''} · Evaluated after each scrape</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors"><Plus size={14} /> New Alert</button>
+        <button onClick={handleNewAlert} className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors">
+          <Plus size={14} /> New Alert
+        </button>
       </div>
 
-      {showForm && <NewAlertForm themes={themes} userEmail={user.email} onSubmit={async (sub) => { await createSubscription(sub); setShowForm(false) }} onCancel={() => setShowForm(false)} />}
+      {/* Usage meter */}
+      <div className="glass rounded-lg p-3">
+        <UsageMeter used={sub.alertCount} max={sub.limits.maxAlerts} label="alerts" color="bg-lego-red" />
+        {!sub.isPro && sub.alertCount >= sub.limits.maxAlerts && (
+          <div className="mt-2">
+            <UpgradeBanner compact feature="up to 10 alerts" onUpgradeClick={onUpgrade} />
+          </div>
+        )}
+      </div>
+
+      {showForm && <NewAlertForm themes={themes} userEmail={user.email} onSubmit={async (alertSub) => { await createSubscription(alertSub); setShowForm(false); sub.refresh() }} onCancel={() => setShowForm(false)} />}
 
       {loading ? <LoadingSkeleton /> : subscriptions.length === 0 && !showForm ? (
         <div className="glass rounded-xl p-10 text-center">
           <Zap size={36} className="text-gray-600 mx-auto mb-3" />
           <h3 className="font-display font-semibold text-sm text-gray-300 mb-1">No alerts yet</h3>
           <p className="text-[11px] text-gray-500 mb-4 max-w-sm mx-auto">Create your first alert to get notified about the sets you love.</p>
-          <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg"><Plus size={14} className="inline mr-1" /> Create First Alert</button>
+          <button onClick={handleNewAlert} className="px-4 py-2 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg"><Plus size={14} className="inline mr-1" /> Create First Alert</button>
         </div>
       ) : (
         <div className="space-y-3">
-          {subscriptions.map((sub) => {
-            const resolved = sub.product_code ? productNames[sub.product_code] : null
-            const displayName = sub.product_name || resolved?.name || null
-            const displayTheme = sub.theme_filter || resolved?.theme || null
-            const displaySlug = sub.slug || resolved?.slug || null
+          {subscriptions.map((s) => {
+            const resolved = s.product_code ? productNames[s.product_code] : null
+            const displayName = s.product_name || resolved?.name || null
+            const displayTheme = s.theme_filter || resolved?.theme || null
+            const displaySlug = s.slug || resolved?.slug || null
 
             return (
-              <div key={sub.id} className="glass rounded-xl p-4 hover:bg-white/[0.02] transition-colors">
+              <div key={s.id} className="glass rounded-xl p-4 hover:bg-white/[0.02] transition-colors">
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-lg bg-lego-red/10 text-lego-red shrink-0 mt-0.5"><Bell size={16} /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      {(sub.alert_types || sub.types || []).map(type => {
+                      {(s.alert_types || s.types || []).map(type => {
                         const info = ALERT_TYPES.find(t => t.key === type)
                         return info ? <span key={type} className={`px-2 py-0.5 bg-white/5 rounded-full text-[9px] font-semibold ${info.color}`}>{info.label}</span> : null
                       })}
@@ -176,8 +202,8 @@ function SubscriptionsTab({ user }) {
                             {displayName}
                           </Link>
                         ) : displayName
-                      ) : sub.product_code ? (
-                        <span>Set #{sub.product_code}</span>
+                      ) : s.product_code ? (
+                        <span>Set #{s.product_code}</span>
                       ) : (
                         'All Products'
                       )}
@@ -185,19 +211,19 @@ function SubscriptionsTab({ user }) {
                       {displayTheme && displayName && <span className="text-gray-500 ml-1">· {displayTheme}</span>}
                     </div>
                     <div className="flex items-center gap-3 mt-1.5 text-[10px] text-gray-500">
-                      <span className="flex items-center gap-1"><Mail size={10} />{sub.email}</span>
-                      {sub.product_code && <span className="font-mono">#{sub.product_code}</span>}
-                      {sub.threshold_pct && <span>≥ {sub.threshold_pct}%</span>}
-                      {sub.threshold_usd && <span>≥ ${sub.threshold_usd}</span>}
+                      <span className="flex items-center gap-1"><Mail size={10} />{s.email}</span>
+                      {s.product_code && <span className="font-mono">#{s.product_code}</span>}
+                      {s.threshold_pct && <span>≥ {s.threshold_pct}%</span>}
+                      {s.threshold_usd && <span>≥ ${s.threshold_usd}</span>}
                     </div>
                   </div>
-                  {confirmDelete === sub.id ? (
+                  {confirmDelete === s.id ? (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => { deleteSubscription(sub.id); setConfirmDelete(null) }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Delete</button>
+                      <button onClick={() => { deleteSubscription(s.id); setConfirmDelete(null) }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Delete</button>
                       <button onClick={() => setConfirmDelete(null)} className="px-2 py-1 glass text-gray-400 text-[10px] font-semibold rounded-md">Cancel</button>
                     </div>
                   ) : (
-                    <button onClick={() => setConfirmDelete(sub.id)} className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all shrink-0"><Trash2 size={13} /></button>
+                    <button onClick={() => setConfirmDelete(s.id)} className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all shrink-0"><Trash2 size={13} /></button>
                   )}
                 </div>
               </div>
@@ -210,7 +236,7 @@ function SubscriptionsTab({ user }) {
 }
 
 function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
-  const [email, setEmail] = useState(userEmail || '')
+  // Email is LOCKED to the user's registered email — no sharing accounts
   const [targetType, setTargetType] = useState('theme')
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [selectedTheme, setSelectedTheme] = useState('')
@@ -222,11 +248,11 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
   const toggleType = (key) => setSelectedTypes(prev => prev.includes(key) ? prev.filter(t => t !== key) : [...prev, key])
 
   const handleSubmit = async () => {
-    if (!email || selectedTypes.length === 0) return
+    if (!userEmail || selectedTypes.length === 0) return
     setSubmitting(true)
     try {
       await onSubmit({
-        email, alert_types: selectedTypes, target_type: targetType,
+        email: userEmail, alert_types: selectedTypes, target_type: targetType,
         product_code: targetType === 'product' ? selectedProduct?.product_code : null,
         theme_filter: targetType === 'theme' ? selectedTheme : null,
         threshold_pct: thresholdPct ? Number(thresholdPct) : null,
@@ -240,10 +266,18 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
   return (
     <div className="glass rounded-xl p-5 border border-lego-red/20">
       <div className="flex items-center gap-2 mb-4"><Zap size={16} className="text-lego-red" /><h3 className="font-display font-semibold text-sm">Create New Alert</h3></div>
+
+      {/* Email — locked to registered email */}
       <div className="mb-4">
         <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-1 block">Email</label>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-lego-red" placeholder="your@email.com" />
+        <div className="relative">
+          <Lock size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+          <input type="email" value={userEmail} disabled
+            className="w-full pl-9 pr-3 py-2 bg-lego-surface2 border border-lego-border rounded-lg text-sm text-gray-400 cursor-not-allowed" />
+        </div>
+        <p className="text-[9px] text-gray-600 mt-1">Alerts are sent to your registered email only.</p>
       </div>
+
       <div className="mb-4">
         <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-2 block">What to watch</label>
         <div className="flex gap-2 mb-3">
@@ -289,7 +323,7 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
         <p className="text-[10px] text-gray-500">Evaluated after each daily scrape. 24h cooldown.</p>
         <div className="flex gap-2">
           <button onClick={onCancel} className="px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={!email || selectedTypes.length === 0 || submitting || (targetType === 'product' && !selectedProduct)} className="flex items-center gap-1.5 px-4 py-2 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50">
+          <button onClick={handleSubmit} disabled={selectedTypes.length === 0 || submitting || (targetType === 'product' && !selectedProduct)} className="flex items-center gap-1.5 px-4 py-2 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50">
             {submitting ? <span className="animate-spin w-3 h-3 border-2 border-white/30 border-t-white rounded-full" /> : <Bell size={14} />} Create Alert
           </button>
         </div>
@@ -392,7 +426,6 @@ function StatusOverTimeChart({ statusOverTime }) {
 
 function StatusBadge({ status, availabilityText }) {
   const info = getStatusDisplay(status, undefined, availabilityText)
-  // If status is already an enriched label like "Backorder (Mar 6)", display it directly
   const isEnrichedLabel = status && status.startsWith('Backorder (') && status !== 'Backorder (Dated)'
   const label = isEnrichedLabel ? status : info.displayLabel
   return <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full border ${info.bgClass} ${info.textClass} ${info.borderClass} whitespace-nowrap`}>{label}</span>

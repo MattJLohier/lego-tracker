@@ -11,8 +11,11 @@ import {
 import AnimatedCounter from '../components/AnimatedCounter'
 import { useStats, useThemes, useBestValue, useNewProducts, useAllSnapshots, useMostExpensiveSets } from '../hooks/useData'
 import { useSavedDashboards } from '../hooks/useSavedDashboards'
+import { useAuth } from '../hooks/useAuth'
+import { useSubscription } from '../hooks/useSubscription'
 import { trackTabSwitch, trackChartCreated, trackDashboardSaved } from '../lib/analytics'
 import { normalizeStatus, getStatusInfo } from '../lib/stockStatus'
+import { ProGate, UpgradeModal, UpgradeBanner } from '../components/UpgradeModal'
 
 const CHART_COLORS = ['#E3000B', '#FFD500', '#006CB7', '#00963F', '#FF6B6B', '#a78bfa', '#f97316', '#06b6d4', '#ec4899', '#84cc16', '#f59e0b', '#8b5cf6', '#14b8a6', '#ef4444', '#6366f1', '#22c55e']
 const TOOLTIP_STYLE = { background: '#16161F', border: '1px solid #2A2A3D', borderRadius: '8px', fontSize: '11px' }
@@ -33,6 +36,9 @@ export default function Analytics() {
   const { snapshots, loading: snapL } = useAllSnapshots()
   const { products: expensiveSets, loading: eL } = useMostExpensiveSets(25)
   const savedDashboardsHook = useSavedDashboards()
+  const { user } = useAuth()
+  const { isPro } = useSubscription()
+  const [showUpgrade, setShowUpgrade] = useState(false)
 
   const handleTabSwitch = (tab) => {
     setActiveTab(tab)
@@ -78,12 +84,18 @@ export default function Analytics() {
           <TimeSeriesTab snapshots={snapshots} loading={snapL} />
         )}
         {activeTab === 'custom' && (
-          <CustomBuilderTab snapshots={snapshots} loading={snapL} savedDashboardsHook={savedDashboardsHook} />
+          <ProGate isPro={isPro || !!user} isLoggedIn={!!user} feature="Custom Analytics Builder" onUpgradeClick={() => setShowUpgrade(true)}>
+            <CustomBuilderTab snapshots={snapshots} loading={snapL} savedDashboardsHook={savedDashboardsHook} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
+          </ProGate>
         )}
         {activeTab === 'saved' && (
-          <SavedReportsTab snapshots={snapshots} loading={snapL} savedDashboardsHook={savedDashboardsHook} onSwitchToBuilder={() => handleTabSwitch('custom')} />
+          <ProGate isPro={isPro || !!user} isLoggedIn={!!user} feature="Saved Reports" onUpgradeClick={() => setShowUpgrade(true)}>
+            <SavedReportsTab snapshots={snapshots} loading={snapL} savedDashboardsHook={savedDashboardsHook} onSwitchToBuilder={() => handleTabSwitch('custom')} isPro={isPro} onUpgrade={() => setShowUpgrade(true)} />
+          </ProGate>
         )}
       </div>
+
+      <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} feature="Custom Analytics" />
     </main>
   )
 }
@@ -591,7 +603,7 @@ const CHART_TYPES = [
   { key: 'pie', label: 'Pie', icon: PieIcon },
 ]
 
-function CustomBuilderTab({ snapshots, loading, savedDashboardsHook }) {
+function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUpgrade }) {
   const [charts, setCharts] = useState([
     { id: 1, metric: 'price_usd', groupBy: 'theme', agg: 'avg', chartType: 'bar', label: 'Average Price ($) by Theme' },
     { id: 2, metric: 'piece_count', groupBy: 'theme', agg: 'sum', chartType: 'bar', label: 'Sum Piece Count by Theme' },
@@ -682,10 +694,10 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook }) {
         <div className="flex items-center gap-2">
           {charts.length > 0 && (
             <button
-              onClick={() => setSaveDialogOpen(true)}
+              onClick={() => { if (isPro) { setSaveDialogOpen(true) } else { onUpgrade?.() } }}
               className="flex items-center gap-1.5 px-3 py-1.5 glass glass-hover text-gray-300 text-xs font-semibold rounded-lg transition-colors"
             >
-              <Save size={14} /> Save Dashboard
+              <Save size={14} /> Save Dashboard {!isPro && <span className="text-lego-yellow text-[9px] ml-1">PRO</span>}
             </button>
           )}
           <button
@@ -937,7 +949,7 @@ function CustomChart({ config, snapshots }) {
 
 /* ========================= SAVED REPORTS TAB ========================= */
 
-function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBuilder }) {
+function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBuilder, isPro, onUpgrade }) {
   const { dashboards, loading: dashLoading, deleteDashboard } = savedDashboardsHook
   const [expandedDash, setExpandedDash] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)

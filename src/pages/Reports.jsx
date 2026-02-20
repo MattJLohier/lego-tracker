@@ -7,7 +7,9 @@ import {
 } from 'lucide-react'
 import { useReportProfiles } from '../hooks/usePipeline'
 import { useAuth } from '../hooks/useAuth'
+import { useSubscription } from '../hooks/useSubscription'
 import { useThemeList } from '../hooks/useData'
+import { UpgradeModal, UpgradeBanner, UsageMeter } from '../components/UpgradeModal'
 import * as api from '../lib/api'
 
 const SECTIONS = [
@@ -39,6 +41,7 @@ export default function Reports() {
   const [tab, setTab] = useState('profiles')
   const [previewHtml, setPreviewHtml] = useState(null)
   const [previewLabel, setPreviewLabel] = useState('Report Preview')
+  const [showUpgrade, setShowUpgrade] = useState(false)
 
   const handlePreview = async (idOrType, label) => {
     setPreviewHtml(null)
@@ -118,11 +121,13 @@ export default function Reports() {
           ))}
         </div>
 
-        {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onPreview={handlePreview} />}
+        {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onPreview={handlePreview} onUpgrade={() => setShowUpgrade(true)} />}
         {tab === 'history' && <HistoryTab hook={hook} onPreview={handlePreview} />}
         {tab === 'stats' && <StatsTab />}
         {tab === 'preview' && <PreviewTab html={previewHtml} label={previewLabel} onClose={() => setPreviewHtml(null)} />}
       </div>
+
+      <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} feature="More reports" />
     </main>
   )
 }
@@ -130,8 +135,9 @@ export default function Reports() {
 
 /* ─── Profiles Tab ─────────────────────────────── */
 
-function ProfilesTab({ user, hook, onPreview }) {
+function ProfilesTab({ user, hook, onPreview, onUpgrade }) {
   const { profiles, loading, createProfile, deleteProfile, generateReport } = hook
+  const sub = useSubscription()
   const [showForm, setShowForm] = useState(false)
   const [confirmDel, setConfirmDel] = useState(null)
   const [sending, setSending] = useState(null)
@@ -147,6 +153,14 @@ function ProfilesTab({ user, hook, onPreview }) {
         <Link to="/auth" className="inline-flex items-center gap-2 px-5 py-2.5 bg-lego-red hover:bg-red-700 text-white text-sm font-semibold rounded-xl transition-colors">Sign In</Link>
       </div>
     )
+  }
+
+  const handleNewReport = () => {
+    if (!sub.canCreateReport) {
+      onUpgrade()
+      return
+    }
+    setShowForm(!showForm)
   }
 
   const handleSend = async (id) => {
@@ -197,12 +211,22 @@ function ProfilesTab({ user, hook, onPreview }) {
             </div>
           )}
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={handleNewReport}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-yellow hover:bg-yellow-600 text-black text-xs font-semibold rounded-lg transition-colors"
           >
             <Plus size={14} /> New Report
           </button>
         </div>
+      </div>
+
+      {/* Usage meter */}
+      <div className="glass rounded-lg p-3">
+        <UsageMeter used={sub.reportCount} max={sub.limits.maxReports} label="reports" color="bg-lego-yellow" />
+        {!sub.isPro && sub.reportCount >= sub.limits.maxReports && (
+          <div className="mt-2">
+            <UpgradeBanner compact feature="up to 10 reports" onUpgradeClick={onUpgrade} />
+          </div>
+        )}
       </div>
 
       {showForm && (
@@ -295,12 +319,14 @@ function ProfilesTab({ user, hook, onPreview }) {
 
 function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel }) {
   const [name, setName] = useState('')
-  const [email, setEmail] = useState(defaultEmail)
   const [freq, setFreq] = useState('daily')
   const [length, setLength] = useState('brief')
   const [sections, setSections] = useState(['price_drops', 'new_products', 'market_stats'])
   const [themeFilter, setThemeFilter] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // Email is locked to the user's registered email — no sharing
+  const email = defaultEmail
 
   const toggleSection = (key) => setSections(prev => prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key])
 
@@ -326,7 +352,10 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel }) {
         </div>
         <div>
           <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-1 block">Email</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-lego-yellow" />
+          <div className="relative">
+            <input type="email" value={email} disabled className="w-full bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-gray-400 cursor-not-allowed" />
+          </div>
+          <p className="text-[9px] text-gray-600 mt-1">Reports are sent to your registered email only.</p>
         </div>
       </div>
       <div className="grid sm:grid-cols-3 gap-4 mb-4">
