@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { BarChart3, Search, Home, Heart, GitCompareArrows, User, LogOut, Bell } from 'lucide-react'
+import { BarChart3, Search, Home, Heart, GitCompareArrows, User, LogOut, Bell, FileText } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 
 const links = [
@@ -7,6 +7,7 @@ const links = [
   { to: '/explore', label: 'Explorer', icon: Search },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/alerts', label: 'Alerts', icon: Bell },
+  { to: '/reports', label: 'Reports', icon: FileText },
   { to: '/compare', label: 'Compare', icon: GitCompareArrows },
 ]
 
