@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Bell, TrendingUp, TrendingDown, Sparkles, AlertTriangle, ShoppingBag,
@@ -14,6 +14,9 @@ import { useAlertSubscriptions } from '../hooks/usePipeline'
 import { useAuth } from '../hooks/useAuth'
 import { useThemeList } from '../hooks/useData'
 import { getStatusDisplay } from '../lib/stockStatus'
+import ProductSearchInput from '../components/ProductSearchInput'
+import { supabase } from '../lib/supabase'
+
 
 const CHART_COLORS = ['#E3000B', '#FFD500', '#006CB7', '#00963F', '#FF6B6B', '#a78bfa', '#f97316', '#06b6d4', '#ec4899', '#84cc16', '#f59e0b', '#8b5cf6', '#14b8a6', '#ef4444', '#6366f1', '#22c55e']
 const TOOLTIP_STYLE = { background: '#16161F', border: '1px solid #2A2A3D', borderRadius: '8px', fontSize: '11px' }
@@ -84,7 +87,37 @@ function SubscriptionsTab({ user }) {
   const { subscriptions, loading, createSubscription, deleteSubscription, apiAvailable } = useAlertSubscriptions()
   const [showForm, setShowForm] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [productNames, setProductNames] = useState({}) // product_code → product_name
   const themes = useThemeList()
+
+  // Resolve product names for subscriptions that only have product_code
+  useEffect(() => {
+    const codes = subscriptions
+      .map(s => s.product_code)
+      .filter(Boolean)
+      .filter(code => !productNames[code])
+
+    if (codes.length === 0) return
+
+    const uniqueCodes = [...new Set(codes)]
+    supabase
+      .from('v_latest_products')
+      .select('product_code, product_name, theme, slug')
+      .in('product_code', uniqueCodes)
+      .then(({ data }) => {
+        if (data) {
+          const map = { ...productNames }
+          for (const row of data) {
+            map[row.product_code] = {
+              name: row.product_name,
+              theme: row.theme,
+              slug: row.slug,
+            }
+          }
+          setProductNames(map)
+        }
+      })
+  }, [subscriptions])
 
   if (!user) return (
     <div className="glass rounded-xl p-10 text-center">
@@ -119,38 +152,57 @@ function SubscriptionsTab({ user }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {subscriptions.map((sub) => (
-            <div key={sub.id} className="glass rounded-xl p-4 hover:bg-white/[0.02] transition-colors">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-lego-red/10 text-lego-red shrink-0 mt-0.5"><Bell size={16} /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    {(sub.alert_types || sub.types || []).map(type => {
-                      const info = ALERT_TYPES.find(t => t.key === type)
-                      return info ? <span key={type} className={`px-2 py-0.5 bg-white/5 rounded-full text-[9px] font-semibold ${info.color}`}>{info.label}</span> : null
-                    })}
+          {subscriptions.map((sub) => {
+            const resolved = sub.product_code ? productNames[sub.product_code] : null
+            const displayName = sub.product_name || resolved?.name || null
+            const displayTheme = sub.theme_filter || resolved?.theme || null
+            const displaySlug = sub.slug || resolved?.slug || null
+
+            return (
+              <div key={sub.id} className="glass rounded-xl p-4 hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-lego-red/10 text-lego-red shrink-0 mt-0.5"><Bell size={16} /></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      {(sub.alert_types || sub.types || []).map(type => {
+                        const info = ALERT_TYPES.find(t => t.key === type)
+                        return info ? <span key={type} className={`px-2 py-0.5 bg-white/5 rounded-full text-[9px] font-semibold ${info.color}`}>{info.label}</span> : null
+                      })}
+                    </div>
+                    <div className="text-xs text-white font-medium">
+                      {displayName ? (
+                        displaySlug ? (
+                          <Link to={`/product/${displaySlug}`} className="hover:text-lego-yellow transition-colors">
+                            {displayName}
+                          </Link>
+                        ) : displayName
+                      ) : sub.product_code ? (
+                        <span>Set #{sub.product_code}</span>
+                      ) : (
+                        'All Products'
+                      )}
+                      {displayTheme && !displayName && <span className="text-gray-500 ml-1">in {displayTheme}</span>}
+                      {displayTheme && displayName && <span className="text-gray-500 ml-1">· {displayTheme}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5 text-[10px] text-gray-500">
+                      <span className="flex items-center gap-1"><Mail size={10} />{sub.email}</span>
+                      {sub.product_code && <span className="font-mono">#{sub.product_code}</span>}
+                      {sub.threshold_pct && <span>≥ {sub.threshold_pct}%</span>}
+                      {sub.threshold_usd && <span>≥ ${sub.threshold_usd}</span>}
+                    </div>
                   </div>
-                  <div className="text-xs text-white font-medium">
-                    {sub.product_name || sub.product_code || sub.slug || 'All Products'}
-                    {sub.theme_filter && <span className="text-gray-500 ml-1">in {sub.theme_filter}</span>}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1.5 text-[10px] text-gray-500">
-                    <span className="flex items-center gap-1"><Mail size={10} />{sub.email}</span>
-                    {sub.threshold_pct && <span>≥ {sub.threshold_pct}%</span>}
-                    {sub.threshold_usd && <span>≥ ${sub.threshold_usd}</span>}
-                  </div>
+                  {confirmDelete === sub.id ? (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => { deleteSubscription(sub.id); setConfirmDelete(null) }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Delete</button>
+                      <button onClick={() => setConfirmDelete(null)} className="px-2 py-1 glass text-gray-400 text-[10px] font-semibold rounded-md">Cancel</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmDelete(sub.id)} className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all shrink-0"><Trash2 size={13} /></button>
+                  )}
                 </div>
-                {confirmDelete === sub.id ? (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => { deleteSubscription(sub.id); setConfirmDelete(null) }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Delete</button>
-                    <button onClick={() => setConfirmDelete(null)} className="px-2 py-1 glass text-gray-400 text-[10px] font-semibold rounded-md">Cancel</button>
-                  </div>
-                ) : (
-                  <button onClick={() => setConfirmDelete(sub.id)} className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all shrink-0"><Trash2 size={13} /></button>
-                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -160,7 +212,7 @@ function SubscriptionsTab({ user }) {
 function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
   const [email, setEmail] = useState(userEmail || '')
   const [targetType, setTargetType] = useState('theme')
-  const [productSearch, setProductSearch] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState(null)
   const [selectedTheme, setSelectedTheme] = useState('')
   const [selectedTypes, setSelectedTypes] = useState(['price_drop', 'back_in_stock'])
   const [thresholdPct, setThresholdPct] = useState('')
@@ -175,7 +227,7 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
     try {
       await onSubmit({
         email, alert_types: selectedTypes, target_type: targetType,
-        product_code: targetType === 'product' ? productSearch : null,
+        product_code: targetType === 'product' ? selectedProduct?.product_code : null,
         theme_filter: targetType === 'theme' ? selectedTheme : null,
         threshold_pct: thresholdPct ? Number(thresholdPct) : null,
         threshold_usd: thresholdUsd ? Number(thresholdUsd) : null,
@@ -206,7 +258,11 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
           </select>
         )}
         {targetType === 'product' && (
-          <input type="text" value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="w-full bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-lego-red" placeholder="Product code or slug (e.g. 75192)" />
+          <ProductSearchInput
+            value={selectedProduct?.product_code}
+            onChange={(product) => setSelectedProduct(product)}
+            onClear={() => setSelectedProduct(null)}
+          />
         )}
       </div>
       <div className="mb-4">
@@ -233,7 +289,7 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
         <p className="text-[10px] text-gray-500">Evaluated after each daily scrape. 24h cooldown.</p>
         <div className="flex gap-2">
           <button onClick={onCancel} className="px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={!email || selectedTypes.length === 0 || submitting} className="flex items-center gap-1.5 px-4 py-2 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50">
+          <button onClick={handleSubmit} disabled={!email || selectedTypes.length === 0 || submitting || (targetType === 'product' && !selectedProduct)} className="flex items-center gap-1.5 px-4 py-2 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50">
             {submitting ? <span className="animate-spin w-3 h-3 border-2 border-white/30 border-t-white rounded-full" /> : <Bell size={14} />} Create Alert
           </button>
         </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
+import { normalizeStatus, getStatusDisplay, getStatusShortLabel } from '../lib/stockStatus'
 
 // Batch-fetch price/stock history for a list of product codes (for card sparklines)
 export function useProductHistories(productCodes = []) {
@@ -257,6 +258,13 @@ export function useProductDetail(slug) {
           if (!latest.in_stock && variant?.attributes?.availabilityStatus) {
             latest.availability_status = variant.attributes.availabilityStatus
             latest.in_stock = /available|in stock/i.test(variant.attributes.availabilityStatus)
+          }
+          if (!latest._resolved_image_url) {
+            latest._resolved_image_url = 
+              nested.primaryImage || 
+              nested.baseImgUrl || 
+              nested.variants?.[0]?.primaryImage ||
+              null
           }
         }
 
@@ -541,29 +549,32 @@ export function useAlerts() {
 
       // Discontinued / retiring products (status changed to something like "Retiring" or went out of stock)
       const discontinued = statusChanges.filter(
-        sc => /retir|discontinu|leaving soon|last chance/i.test(sc.toStatus) ||
-              (sc.toStatus === 'Out of Stock' && /available|in stock/i.test(sc.fromStatus))
+        sc => sc.toCategory === 'retired' ||
+              sc.toCategory === 'sold_out' ||
+              (sc.toCategory === 'out_of_stock' && sc.fromCategory === 'in_stock')
       )
 
       // Status distribution over time for the stacked chart
       const statusByDate = new Map()
-      const allStatuses = new Set()
+      const allStatusLabels = new Set()
       for (const s of allData) {
         if (!s.scraped_date) continue
-        const status = s.availability_status || (s.in_stock ? 'Available' : 'Out of Stock')
-        allStatuses.add(status)
+        const label = getStatusShortLabel(s.availability_status)
+        allStatusLabels.add(label)
         if (!statusByDate.has(s.scraped_date)) statusByDate.set(s.scraped_date, {})
         const obj = statusByDate.get(s.scraped_date)
-        obj[status] = (obj[status] || 0) + 1
+        obj[label] = (obj[label] || 0) + 1
       }
-      const statuses = [...allStatuses].sort()
+      const statuses = [...allStatusLabels].sort()
       const statusOverTime = {
-        data: Array.from(statusByDate.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([date, obj]) => {
-          const row = { date }
-          for (const s of statuses) row[s] = obj[s] || 0
-          return row
-        }),
-        statuses
+        data: Array.from(statusByDate.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([date, obj]) => {
+            const row = { date }
+            for (const s of statuses) row[s] = obj[s] || 0
+            return row
+          }),
+        statuses,
       }
 
       // Recently went on sale

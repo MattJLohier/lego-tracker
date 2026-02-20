@@ -62,6 +62,13 @@ export default function ProductDetail() {
     })
   }, [history])
 
+  // Track product view — must be before any early returns to satisfy Rules of Hooks
+  useEffect(() => {
+    if (product?.product_name) {
+      trackProductView(slug, product.product_name, product.theme, Number(product.price_usd))
+    }
+  }, [slug, product?.product_name])
+
   if (loading) return (
     <main className="pt-20 pb-16 px-6 min-h-screen">
       <div className="max-w-5xl mx-auto">
@@ -105,13 +112,6 @@ export default function ProductDetail() {
   const currentPrice = Number(price_usd)
   const priceChange = currentPrice - firstPrice
   const priceChangePct = firstPrice > 0 ? ((priceChange / firstPrice) * 100).toFixed(1) : 0
-
-  // Track product view
-  useEffect(() => {
-    if (product_name) {
-      trackProductView(slug, product_name, theme, currentPrice)
-    }
-  }, [slug, product_name])
 
   const chartData = history.map(h => ({
     date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
