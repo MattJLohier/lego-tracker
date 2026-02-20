@@ -12,23 +12,20 @@
  *   R_RETIRED               → "Retired Product"
  *   null                    → unknown
  *
- * Plus legacy/fallback strings from older data:
- *   "Available", "in stock", "backorder", "out_of_stock", etc.
- *
  * This module provides a single source of truth for:
  *   1. Whether a status means "in stock" or not
  *   2. What color category it belongs to (green/yellow/orange/red)
  *   3. A human-readable display label
  *   4. A normalized category key for comparison (so F_BACKORDER_FOR_DATE ≠ G_BACKORDER)
+ *   5. Enriched labels using availability_text (e.g. "Backorder (Mar 7)")
  */
 
 // ─── CATEGORY DEFINITIONS ────────────────────────────────────
-// Each category has a unique key used for comparisons, display, and charts.
 
 const CATEGORY_INFO = {
   in_stock: {
     label: 'In Stock',
-    color: '#34d399',        // green-400
+    color: '#34d399',
     bgClass: 'bg-green-500/15',
     textClass: 'text-green-400',
     borderClass: 'border-green-500/30',
@@ -38,7 +35,7 @@ const CATEGORY_INFO = {
   },
   pre_order: {
     label: 'Pre-Order',
-    color: '#818cf8',        // indigo-400
+    color: '#818cf8',
     bgClass: 'bg-indigo-500/15',
     textClass: 'text-indigo-400',
     borderClass: 'border-indigo-500/30',
@@ -48,7 +45,7 @@ const CATEGORY_INFO = {
   },
   coming_soon: {
     label: 'Coming Soon',
-    color: '#a78bfa',        // violet-400
+    color: '#a78bfa',
     bgClass: 'bg-violet-500/15',
     textClass: 'text-violet-400',
     borderClass: 'border-violet-500/30',
@@ -58,27 +55,27 @@ const CATEGORY_INFO = {
   },
   backorder_dated: {
     label: 'Backorder (Dated)',
-    color: '#f97316',        // orange-500
-    bgClass: 'bg-orange-500/15',
-    textClass: 'text-orange-400',
-    borderClass: 'border-orange-500/30',
-    dotClass: 'bg-orange-400',
-    isAvailable: false,
-    sortOrder: 4,
-  },
-  backorder: {
-    label: 'Backorder',
-    color: '#fbbf24',        // amber-400
+    color: '#fbbf24',
     bgClass: 'bg-yellow-500/15',
     textClass: 'text-yellow-400',
     borderClass: 'border-yellow-500/30',
     dotClass: 'bg-yellow-400',
     isAvailable: false,
+    sortOrder: 4,
+  },
+  backorder: {
+    label: 'Backorder',
+    color: '#f97316',
+    bgClass: 'bg-orange-500/15',
+    textClass: 'text-orange-400',
+    borderClass: 'border-orange-500/30',
+    dotClass: 'bg-orange-400',
+    isAvailable: false,
     sortOrder: 5,
   },
   out_of_stock: {
     label: 'Out of Stock',
-    color: '#f87171',        // red-400
+    color: '#f87171',
     bgClass: 'bg-red-500/15',
     textClass: 'text-red-400',
     borderClass: 'border-red-500/30',
@@ -88,7 +85,7 @@ const CATEGORY_INFO = {
   },
   sold_out: {
     label: 'Sold Out',
-    color: '#ef4444',        // red-500
+    color: '#ef4444',
     bgClass: 'bg-red-500/15',
     textClass: 'text-red-400',
     borderClass: 'border-red-500/30',
@@ -98,7 +95,7 @@ const CATEGORY_INFO = {
   },
   retired: {
     label: 'Retired',
-    color: '#6b7280',        // gray-500
+    color: '#6b7280',
     bgClass: 'bg-gray-500/15',
     textClass: 'text-gray-400',
     borderClass: 'border-gray-500/30',
@@ -108,7 +105,7 @@ const CATEGORY_INFO = {
   },
   unavailable: {
     label: 'Unavailable',
-    color: '#f97316',        // orange-500
+    color: '#f97316',
     bgClass: 'bg-orange-500/15',
     textClass: 'text-orange-400',
     borderClass: 'border-orange-500/30',
@@ -118,7 +115,7 @@ const CATEGORY_INFO = {
   },
   unknown: {
     label: 'Unknown',
-    color: '#6b7280',        // gray-500
+    color: '#6b7280',
     bgClass: 'bg-gray-500/15',
     textClass: 'text-gray-400',
     borderClass: 'border-gray-500/30',
@@ -129,15 +126,14 @@ const CATEGORY_INFO = {
 }
 
 // ─── STATUS → CATEGORY MAPPING ──────────────────────────────
-// Exact match lookup (case-insensitive). The LEGO API codes are the primary keys.
 
 const STATUS_CATEGORIES = {
-  // === LEGO API status codes (primary — these are what the DB stores) ===
+  // === LEGO API status codes ===
   'a_pre_order_for_date': 'pre_order',
   'b_coming_soon_at_date': 'coming_soon',
   'e_available': 'in_stock',
-  'f_backorder_for_date': 'backorder_dated',   // ← distinct from G_BACKORDER
-  'g_backorder': 'backorder',                   // ← indefinite backorder
+  'f_backorder_for_date': 'backorder_dated',
+  'g_backorder': 'backorder',
   'h_out_of_stock': 'out_of_stock',
   'k_sold_out': 'sold_out',
   'r_retired': 'retired',
@@ -156,7 +152,6 @@ const STATUS_CATEGORIES = {
 
   'backorder': 'backorder',
   'backordered': 'backorder',
-  'f_backorder_for_date': 'backorder_dated',
 
   'temporarily_unavailable': 'unavailable',
   'temporarily unavailable': 'unavailable',
@@ -182,13 +177,64 @@ const STATUS_CATEGORIES = {
   'leaving_soon': 'retired',
   'leaving soon': 'retired',
   'discontinued': 'retired',
+
+  // === Display labels (so StatusBadge can receive its own output) ===
+  'backorder (dated)': 'backorder_dated',
+  'unavailable': 'unavailable',
+  'unknown': 'unknown',
+}
+
+// ─── DATE PARSING ────────────────────────────────────────────
+
+/**
+ * Extract a short date from availability_text like "Will ship by March 7, 2026"
+ * Returns a short form like "Mar 7" or "Mar 7, 2026" if it's a different year.
+ */
+function parseShipDate(availabilityText) {
+  if (!availabilityText) return null
+  const text = String(availabilityText).trim()
+
+  // Match patterns like "Will ship by March 7, 2026", "Available from April 15, 2026"
+  const match = text.match(/(?:ship|available|arrive|deliver)\w*\s+(?:by|on|from)?\s*(\w+\s+\d{1,2},?\s*\d{4})/i)
+  if (match) {
+    try {
+      const parsed = new Date(match[1])
+      if (!isNaN(parsed.getTime())) {
+        const now = new Date()
+        const month = parsed.toLocaleString('en-US', { month: 'short' })
+        const day = parsed.getDate()
+        if (parsed.getFullYear() !== now.getFullYear()) {
+          return `${month} ${day}, ${parsed.getFullYear()}`
+        }
+        return `${month} ${day}`
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
+  // Fallback: extract "Month Day" directly
+  const fallback = text.match(/(?:by|on|from)\s+(\w+\s+\d{1,2})/i)
+  if (fallback) return fallback[1]
+
+  return null
+}
+
+/**
+ * Get the full availability detail text, cleaned up.
+ * Returns null for generic texts like "Available now".
+ */
+function parseAvailabilityDetail(availabilityText) {
+  if (!availabilityText) return null
+  const text = String(availabilityText).trim()
+  if (text.toLowerCase() === 'available now') return null
+  return text
 }
 
 // ─── CORE FUNCTIONS ──────────────────────────────────────────
 
 /**
  * Normalize a raw availability_status string to a category key.
- * This is the KEY function — it maps every possible status to one of our categories.
  */
 export function normalizeStatus(rawStatus, inStockBool) {
   if (!rawStatus && inStockBool !== undefined) {
@@ -198,11 +244,15 @@ export function normalizeStatus(rawStatus, inStockBool) {
 
   const lower = String(rawStatus).toLowerCase().trim()
 
-  // Exact match first (covers all LEGO API codes + legacy strings)
+  // Don't re-normalize enriched labels like "Backorder (Mar 7)"
+  if (lower.startsWith('backorder (') && lower !== 'backorder (dated)') {
+    return 'backorder_dated'
+  }
+
   const category = STATUS_CATEGORIES[lower]
   if (category) return category
 
-  // Fuzzy fallback for anything unexpected
+  // Fuzzy fallback
   if (/available|in.?stock/i.test(lower)) return 'in_stock'
   if (/pre.?order/i.test(lower)) return 'pre_order'
   if (/coming.?soon/i.test(lower)) return 'coming_soon'
@@ -213,7 +263,6 @@ export function normalizeStatus(rawStatus, inStockBool) {
   if (/out.?of.?stock/i.test(lower)) return 'out_of_stock'
   if (/unavailable|temp/i.test(lower)) return 'unavailable'
 
-  // Boolean fallback
   if (inStockBool !== undefined) {
     return inStockBool ? 'in_stock' : 'out_of_stock'
   }
@@ -230,15 +279,41 @@ export function getStatusInfo(category) {
 
 /**
  * Combined: get full display info from raw status string.
- * Returns category, label, colors, and availability.
+ *
+ * Pass availabilityText (3rd arg) to get enriched labels:
+ *   "Backorder (Dated)" → "Backorder (Mar 7)"
+ *   "Pre-Order" → "Pre-Order (Apr 15)"
+ *   "Coming Soon" → "Coming Soon (May 1)"
+ *
+ * Usage:
+ *   getStatusDisplay('F_BACKORDER_FOR_DATE', false, 'Will ship by March 7, 2026')
+ *   → { displayLabel: "Backorder (Mar 7)", detail: "Will ship by March 7, 2026", ... }
  */
-export function getStatusDisplay(rawStatus, inStockBool) {
+export function getStatusDisplay(rawStatus, inStockBool, availabilityText) {
   const category = normalizeStatus(rawStatus, inStockBool)
   const info = getStatusInfo(category)
+
+  let displayLabel = info.label
+  const detail = parseAvailabilityDetail(availabilityText)
+  const shipDate = parseShipDate(availabilityText)
+
+  // Enrich label with actual date for dated statuses
+  if (shipDate) {
+    if (category === 'backorder_dated') {
+      displayLabel = `Backorder (${shipDate})`
+    } else if (category === 'pre_order') {
+      displayLabel = `Pre-Order (${shipDate})`
+    } else if (category === 'coming_soon') {
+      displayLabel = `Coming Soon (${shipDate})`
+    }
+  }
+
   return {
     ...info,
     category,
-    displayLabel: info.label,
+    displayLabel,
+    detail,       // Full text, e.g. "Will ship by March 7, 2026"
+    shipDate,     // Short date, e.g. "Mar 7"
   }
 }
 
@@ -269,8 +344,7 @@ export function getAllCategories() {
 }
 
 /**
- * Get a short label suitable for chart legends and stacked area charts.
- * Maps raw LEGO status codes to clean names.
+ * Get a short label suitable for chart legends.
  */
 export function getStatusShortLabel(rawStatus) {
   const category = normalizeStatus(rawStatus)

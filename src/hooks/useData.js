@@ -259,6 +259,10 @@ export function useProductDetail(slug) {
             latest.availability_status = variant.attributes.availabilityStatus
             latest.in_stock = /available|in stock/i.test(variant.attributes.availabilityStatus)
           }
+          // Extract availability_text from nested variant attributes
+          if (!latest.availability_text && variant?.attributes?.availabilityText) {
+            latest.availability_text = variant.attributes.availabilityText
+          }
           if (!latest._resolved_image_url) {
             latest._resolved_image_url = 
               nested.primaryImage || 
@@ -405,7 +409,7 @@ export function useAllSnapshots() {
       while (keepGoing) {
         const { data, error } = await supabase
           .from('v_snapshot_timeseries')
-          .select('product_code, product_name, theme, price_usd, piece_count, rating, in_stock, on_sale, is_new, availability_status, age_range, scraped_date, price_per_piece, vip_points, discount_usd, list_price_usd, sale_percentage, slug')
+          .select('product_code, product_name, theme, price_usd, piece_count, rating, in_stock, on_sale, is_new, availability_status, availability_text, age_range, scraped_date, price_per_piece, vip_points, discount_usd, list_price_usd, sale_percentage, slug')
           .order('product_code', { ascending: true })
           .order('scraped_date', { ascending: true })
           .range(from, from + pageSize - 1)
@@ -444,7 +448,7 @@ export function useAlerts() {
       while (keepGoing) {
         const { data, error } = await supabase
           .from('v_snapshot_timeseries')
-          .select('product_code, product_name, theme, price_usd, list_price_usd, in_stock, on_sale, is_new, availability_status, scraped_date, slug, piece_count, rating, discount_usd, sale_percentage')
+          .select('product_code, product_name, theme, price_usd, list_price_usd, in_stock, on_sale, is_new, availability_status, availability_text, scraped_date, slug, piece_count, rating, discount_usd, sale_percentage')
           .order('product_code', { ascending: true })
           .order('scraped_date', { ascending: true })
           .range(from, from + pageSize - 1)
@@ -522,6 +526,7 @@ export function useAlerts() {
       newDebuts.sort((a, b) => b.price - a.price)
 
       // Status changes (availability_status changed between snapshots)
+      // Compare NORMALIZED categories so F_BACKORDER_FOR_DATE ≠ G_BACKORDER
       const statusChanges = []
       for (const [code, snaps] of byProduct) {
         if (snaps.length < 2) continue
@@ -529,16 +534,21 @@ export function useAlerts() {
         for (let i = 1; i < sorted.length; i++) {
           const prev = sorted[i - 1]
           const curr = sorted[i]
-          const prevStatus = prev.availability_status || (prev.in_stock ? 'Available' : 'Out of Stock')
-          const currStatus = curr.availability_status || (curr.in_stock ? 'Available' : 'Out of Stock')
-          if (prevStatus !== currStatus) {
+          const prevCategory = normalizeStatus(prev.availability_status, prev.in_stock)
+          const currCategory = normalizeStatus(curr.availability_status, curr.in_stock)
+          // Only report when the normalized category actually changed
+          if (prevCategory !== currCategory) {
+            const prevDisplay = getStatusDisplay(prev.availability_status, prev.in_stock, prev.availability_text)
+            const currDisplay = getStatusDisplay(curr.availability_status, curr.in_stock, curr.availability_text)
             statusChanges.push({
               product_code: code,
               product_name: curr.product_name,
               theme: curr.theme,
               slug: curr.slug,
-              fromStatus: prevStatus,
-              toStatus: currStatus,
+              fromStatus: prevDisplay.displayLabel,
+              toStatus: currDisplay.displayLabel,
+              fromCategory: prevCategory,
+              toCategory: currCategory,
               date: curr.scraped_date,
               price: Number(curr.price_usd) || 0,
             })
@@ -547,14 +557,14 @@ export function useAlerts() {
       }
       statusChanges.sort((a, b) => b.date.localeCompare(a.date))
 
-      // Discontinued / retiring products (status changed to something like "Retiring" or went out of stock)
+      // Discontinued / retiring products
       const discontinued = statusChanges.filter(
         sc => sc.toCategory === 'retired' ||
               sc.toCategory === 'sold_out' ||
               (sc.toCategory === 'out_of_stock' && sc.fromCategory === 'in_stock')
       )
 
-      // Status distribution over time for the stacked chart
+      // Status distribution over time — use normalized labels for clean chart legends
       const statusByDate = new Map()
       const allStatusLabels = new Set()
       for (const s of allData) {

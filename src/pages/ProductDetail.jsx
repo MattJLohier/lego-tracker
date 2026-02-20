@@ -41,8 +41,8 @@ export default function ProductDetail() {
     for (let i = 1; i < history.length; i++) {
       const prev = history[i - 1]
       const curr = history[i]
-      const prevDisplay = getStatusDisplay(prev.availability_status, prev.in_stock)
-      const currDisplay = getStatusDisplay(curr.availability_status, curr.in_stock)
+      const prevDisplay = getStatusDisplay(prev.availability_status, prev.in_stock, prev.availability_text)
+      const currDisplay = getStatusDisplay(curr.availability_status, curr.in_stock, curr.availability_text)
       if (prevDisplay.category !== currDisplay.category) {
         changes.push({ from: prevDisplay.displayLabel, to: currDisplay.displayLabel, date: curr.scraped_date })
       }
@@ -52,11 +52,11 @@ export default function ProductDetail() {
 
   const stockChartData = useMemo(() => {
     return history.map(h => {
-      const statusInfo = getStatusDisplay(h.availability_status, h.in_stock)
+      const statusInfo = getStatusDisplay(h.availability_status, h.in_stock, h.availability_text)
       return {
         date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         status: statusInfo.displayLabel,
-        inStock: statusInfo.isAvailable ? 1 : 0,
+        inStock: 1, // Always 1 so the bar renders; color conveys the status
         color: statusInfo.color,
       }
     })
@@ -161,8 +161,8 @@ export default function ProductDetail() {
               <MiniStat icon={<Clock size={13} />} label="Days Tracked" value={daysTracked} />
               <MiniStat icon={<CalendarDays size={13} />} label="First Seen" value={firstSeen ? new Date(firstSeen).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} />
               <MiniStat icon={<ShoppingBag size={13} />} label="Status" 
-                value={getStatusDisplay(availability_status, in_stock).displayLabel} 
-                color={getStatusDisplay(availability_status, in_stock).textClass} />
+                value={getStatusDisplay(availability_status, in_stock, product.availability_text).displayLabel} 
+                color={getStatusDisplay(availability_status, in_stock, product.availability_text).textClass} />
               <MiniStat icon={<Star size={13} />} label="VIP Points" value={vip_points || '—'} />
             </div>
 
@@ -396,11 +396,14 @@ export default function ProductDetail() {
   )
 }
 
-function StatusBadge({ status }) {
-  const info = getStatusDisplay(status)
+function StatusBadge({ status, availabilityText }) {
+  const info = getStatusDisplay(status, undefined, availabilityText)
+  // Preserve enriched labels like "Backorder (Mar 7)" that were already resolved
+  const isEnrichedLabel = status && status.startsWith('Backorder (') && status !== 'Backorder (Dated)'
+  const label = isEnrichedLabel ? status : info.displayLabel
   return (
     <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full border ${info.bgClass} ${info.textClass} ${info.borderClass} whitespace-nowrap`}>
-      {info.displayLabel}
+      {label}
     </span>
   )
 }
