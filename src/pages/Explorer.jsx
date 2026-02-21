@@ -37,7 +37,7 @@ export default function Explorer() {
   const [ageRange, setAgeRange] = useState('all')
   const [availability, setAvailability] = useState('all')
   const [sortBy, setSortBy] = useState('price_usd')
-  const [sortDir, setSortDir] = useState('asc')
+  const [sortDir, setSortDir] = useState('desc')
   const [showFilters, setShowFilters] = useState(false)
   const [compareMode, setCompareMode] = useState(false)
   const [compareList, setCompareList] = useState([])

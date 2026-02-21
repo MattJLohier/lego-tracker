@@ -30,13 +30,17 @@ export function UpgradeModal({ isOpen, onClose, feature = '' }) {
     setLoading(true)
 
     if (STRIPE_CHECKOUT_URL) {
-      // Redirect to Stripe Checkout with user email pre-filled
       const url = new URL(STRIPE_CHECKOUT_URL)
       url.searchParams.set('prefilled_email', user.email)
       url.searchParams.set('client_reference_id', user.id)
+
+      // ✅ ADD THESE — tell Stripe where to redirect after payment
+      const origin = window.location.origin
+      url.searchParams.set('success_url', `${origin}/pro/success`)
+      url.searchParams.set('cancel_url', `${origin}/pro/cancel`)
+
       window.location.href = url.toString()
     } else {
-      // Fallback: show setup instructions
       alert('Stripe is not configured yet. Set VITE_STRIPE_CHECKOUT_URL in your environment variables.')
       setLoading(false)
     }
