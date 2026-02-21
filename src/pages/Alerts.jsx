@@ -219,7 +219,7 @@ function SubscriptionsTab({ user, onUpgrade }) {
                   </div>
                   {confirmDelete === s.id ? (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => { deleteSubscription(s.id); setConfirmDelete(null) }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Delete</button>
+                      <button onClick={async () => { await deleteSubscription(s.id); setConfirmDelete(null); sub.refresh() }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Delete</button>
                       <button onClick={() => setConfirmDelete(null)} className="px-2 py-1 glass text-gray-400 text-[10px] font-semibold rounded-md">Cancel</button>
                     </div>
                   ) : (

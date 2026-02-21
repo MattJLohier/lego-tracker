@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   FileText, Plus, Trash2, Mail, Clock, Eye, Send, Zap, TrendingDown,
   ShoppingBag, Sparkles, AlertTriangle, Tag, BarChart3, X, Check,
-  Power, RefreshCw, Calendar, Activity, PlayCircle, Filter
+  Power, RefreshCw, Calendar, Activity, PlayCircle, Filter, Crown
 } from 'lucide-react'
 import { useReportProfiles } from '../hooks/usePipeline'
 import { useAuth } from '../hooks/useAuth'
@@ -233,7 +233,9 @@ function ProfilesTab({ user, hook, onPreview, onUpgrade }) {
         <NewReportForm
           themes={themes}
           email={user.email}
-          onCreate={async (p) => { await createProfile(p); setShowForm(false) }}
+          isPro={sub.isPro}
+          onUpgrade={onUpgrade}
+          onCreate={async (p) => { await createProfile(p); setShowForm(false); sub.refresh() }}
           onCancel={() => setShowForm(false)}
         />
       )}
@@ -243,25 +245,38 @@ function ProfilesTab({ user, hook, onPreview, onUpgrade }) {
         <div className="space-y-4">
           <h3 className="font-display font-semibold text-xs text-gray-400 uppercase tracking-wider">Quick Start Templates</h3>
           <div className="grid sm:grid-cols-3 gap-3">
-            {PRESETS.map((p, i) => (
-              <button
-                key={i}
-                onClick={async () => { await createProfile({ ...p, email: user.email, active: true }) }}
-                className="glass rounded-xl p-4 text-left hover:bg-white/[0.03] transition-colors group border border-transparent hover:border-lego-yellow/20"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Zap size={14} className="text-lego-yellow" />
-                  <span className="text-xs font-semibold text-white group-hover:text-lego-yellow transition-colors">{p.name}</span>
-                </div>
-                <div className="flex gap-1 flex-wrap mb-2">
-                  {p.sections.map(s => {
-                    const info = SECTIONS.find(x => x.key === s)
-                    return info ? <span key={s} className={`px-1.5 py-0.5 bg-white/5 rounded text-[8px] font-semibold ${info.color}`}>{info.label}</span> : null
-                  })}
-                </div>
-                <div className="text-[10px] text-gray-500">{p.freq} · {p.length}</div>
-              </button>
-            ))}
+            {PRESETS.map((p, i) => {
+              const isDaily = p.freq === 'daily'
+              const locked = isDaily && !sub.isPro
+              return (
+                <button
+                  key={i}
+                  onClick={async () => {
+                    if (locked) { onUpgrade(); return }
+                    await createProfile({ ...p, email: user.email, active: true }); sub.refresh()
+                  }}
+                  className="glass rounded-xl p-4 text-left hover:bg-white/[0.03] transition-colors group border border-transparent hover:border-lego-yellow/20 relative"
+                >
+                  {locked && (
+                    <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 bg-lego-yellow/10 rounded-full">
+                      <Crown size={9} className="text-lego-yellow" />
+                      <span className="text-[8px] font-semibold text-lego-yellow">Pro</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap size={14} className="text-lego-yellow" />
+                    <span className={`text-xs font-semibold transition-colors ${locked ? 'text-gray-500' : 'text-white group-hover:text-lego-yellow'}`}>{p.name}</span>
+                  </div>
+                  <div className="flex gap-1 flex-wrap mb-2">
+                    {p.sections.map(s => {
+                      const info = SECTIONS.find(x => x.key === s)
+                      return info ? <span key={s} className={`px-1.5 py-0.5 bg-white/5 rounded text-[8px] font-semibold ${locked ? 'text-gray-600' : info.color}`}>{info.label}</span> : null
+                    })}
+                  </div>
+                  <div className="text-[10px] text-gray-500">{p.freq} · {p.length}</div>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -300,7 +315,7 @@ function ProfilesTab({ user, hook, onPreview, onUpgrade }) {
               </button>
               {confirmDel === prof.id ? (
                 <>
-                  <button onClick={() => { deleteProfile(prof.id); setConfirmDel(null) }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Del</button>
+                  <button onClick={async () => { await deleteProfile(prof.id); setConfirmDel(null); sub.refresh() }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Del</button>
                   <button onClick={() => setConfirmDel(null)} className="px-2 py-1 glass text-gray-400 text-[10px] rounded-md">No</button>
                 </>
               ) : (
@@ -317,9 +332,10 @@ function ProfilesTab({ user, hook, onPreview, onUpgrade }) {
 
 /* ─── New Report Form ──────────────────────────── */
 
-function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel }) {
-  const [name, setName] = useState('')
-  const [freq, setFreq] = useState('daily')
+function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro, onUpgrade }) {
+  const [name, setName] = useState(isPro ? 'My Daily Brief' : 'My Weekly Brief')
+  const [freq, setFreq] = useState(isPro ? 'daily' : 'weekly')
+  const [nameManuallyEdited, setNameManuallyEdited] = useState(false)
   const [length, setLength] = useState('brief')
   const [sections, setSections] = useState(['price_drops', 'new_products', 'market_stats'])
   const [themeFilter, setThemeFilter] = useState('')
@@ -348,7 +364,7 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel }) {
       <div className="grid sm:grid-cols-2 gap-4 mb-4">
         <div>
           <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-1 block">Report Name</label>
-          <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-lego-yellow" placeholder="My Daily Brief" />
+          <input value={name} onChange={e => { setName(e.target.value); setNameManuallyEdited(true) }} className="w-full bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-lego-yellow" placeholder="My Weekly Brief" />
         </div>
         <div>
           <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-1 block">Email</label>
@@ -361,11 +377,30 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel }) {
       <div className="grid sm:grid-cols-3 gap-4 mb-4">
         <div>
           <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-2 block">Frequency</label>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             {['daily', 'weekly'].map(f => (
-              <button key={f} onClick={() => setFreq(f)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${freq === f ? 'bg-lego-yellow text-black' : 'glass text-gray-400'}`}>{f}</button>
+              <button key={f}
+                onClick={() => {
+                  if (f === 'daily' && !isPro) { onUpgrade(); return }
+                  setFreq(f)
+                  if (!nameManuallyEdited) setName(f === 'daily' ? 'My Daily Brief' : 'My Weekly Brief')
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                  freq === f ? 'bg-lego-yellow text-black' :
+                  f === 'daily' && !isPro ? 'glass text-gray-600 cursor-not-allowed' :
+                  'glass text-gray-400'
+                }`}>
+                {f}
+                {f === 'daily' && !isPro && <Crown size={10} className="text-lego-yellow" />}
+              </button>
             ))}
           </div>
+          {!isPro && (
+            <p className="text-[9px] text-gray-600 mt-1.5">
+              Daily reports require{' '}
+              <button onClick={onUpgrade} className="text-lego-yellow hover:underline font-semibold">Pro</button>
+            </p>
+          )}
         </div>
         <div>
           <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-2 block">Length</label>
