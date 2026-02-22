@@ -71,6 +71,7 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
     || product.thumbnail_url || product.image || product.product_image_url || null
 
   const storeUrl = legoStoreUrl(product)
+  // FIX: use !! to prevent rendering 0 when discount_usd is falsy
   const hasDiscount = !!discount_usd && Number(discount_usd) > 0
   const salePct = sale_percentage ? Number(sale_percentage) : (hasDiscount && list_price_usd && Number(list_price_usd) > 0)
     ? Math.round((Number(discount_usd) / Number(list_price_usd)) * 100) : 0
@@ -111,6 +112,8 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
   const sparkColor = priceChange > 0 ? '#f87171' : priceChange < 0 ? '#34d399' : '#FFD500'
   const sparkFill = priceChange > 0 ? 'rgba(248,113,113,0.1)' : priceChange < 0 ? 'rgba(52,211,153,0.1)' : 'rgba(255,213,0,0.1)'
 
+  const statusInfo = getStatusDisplay(availability_status, in_stock)
+
   return (
     <div className="glass rounded-xl overflow-hidden card-shine glass-hover transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 group relative flex flex-col">
       {/* Favorite button */}
@@ -138,13 +141,13 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
       )}
 
       <Link to={`/product/${slug}`} className="flex flex-col flex-1">
-        {/* Image area */}
-        <div className="relative bg-gradient-to-b from-lego-surface2 to-lego-surface p-4 aspect-square flex items-center justify-center">
+        {/* Image area — fixed aspect ratio with clamped image size */}
+        <div className="relative bg-gradient-to-b from-lego-surface2 to-lego-surface aspect-square flex items-center justify-center p-4">
           {imageUrl ? (
             <img
               src={imageUrl}
               alt={product_name || `Set ${product_code}`}
-              className="max-h-full max-w-full object-contain drop-shadow-lg"
+              className="max-w-[85%] max-h-[85%] object-contain drop-shadow-lg"
               loading="lazy"
               onError={(e) => {
                 e.target.onerror = null
@@ -171,21 +174,14 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
               <span className="text-white text-[11px] font-display font-bold">−{salePct}%</span>
             </div>
           )}
+        </div>
 
-          {/* Stock dot + label bottom-left */}
-          <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
-            {(() => {
-              const statusInfo = getStatusDisplay(availability_status, in_stock)
-              return (
-                <>
-                  <div className={`w-2 h-2 rounded-full shadow-sm ${statusInfo.dotClass}`} style={{ boxShadow: `0 0 4px ${statusInfo.color}40` }} />
-                  <span className={`text-[9px] font-semibold ${statusInfo.textClass}`}>
-                    {statusInfo.displayLabel}
-                  </span>
-                </>
-              )
-            })()}
-          </div>
+        {/* Status bar — separated from image so it never overlaps */}
+        <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-lego-surface2/50 border-b border-lego-border/20">
+          <div className={`w-2 h-2 rounded-full shadow-sm shrink-0 ${statusInfo.dotClass}`} style={{ boxShadow: `0 0 4px ${statusInfo.color}40` }} />
+          <span className={`text-[9px] font-semibold truncate ${statusInfo.textClass}`}>
+            {statusInfo.displayLabel}
+          </span>
         </div>
 
         {/* Info section */}
@@ -213,13 +209,15 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
             )}
           </div>
 
-          {/* Micro stats row */}
+          {/* Micro stats row — FIX: use !! to prevent rendering 0 */}
           <div className="flex items-center gap-2.5 text-[10px] text-gray-400 mb-3">
             {!!piece_count && Number(piece_count) > 0 && (
               <span className="flex items-center gap-0.5"><Package size={10} />{Number(piece_count).toLocaleString()}</span>
             )}
-            {!!rating && <span className="flex items-center gap-0.5"><Star size={10} className="text-lego-yellow fill-lego-yellow" />{Number(rating).toFixed(1)}</span>}
-            {price_per_piece && Number(price_per_piece) > 0 && Number(price_per_piece) < 50 && (
+            {!!rating && (
+              <span className="flex items-center gap-0.5"><Star size={10} className="text-lego-yellow fill-lego-yellow" />{Number(rating).toFixed(1)}</span>
+            )}
+            {!!price_per_piece && Number(price_per_piece) > 0 && Number(price_per_piece) < 50 && (
               <span className="flex items-center gap-0.5"><Tag size={10} />${Number(price_per_piece).toFixed(2)}/pc</span>
             )}
           </div>

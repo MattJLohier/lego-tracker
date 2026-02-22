@@ -112,17 +112,24 @@ export default function Explorer() {
   }
 
   return (
-    <main className="pt-18 pb-16 px-4 sm:px-6 min-h-screen">
-      <div className="max-w-7xl mx-auto pt-16">
-        <div className="flex items-center justify-between mb-6">
+    <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-6 flex items-start justify-between gap-3">
           <div>
-            <h1 className="font-display font-bold text-2xl tracking-tight mb-1">Product Explorer</h1>
-            <p className="text-gray-500 text-xs">Search, filter, and analyze every tracked LEGO set</p>
+            <h1 className="font-display font-bold text-2xl tracking-tight mb-1">
+              <Search size={24} className="inline text-lego-red mr-1.5" /> Product Explorer
+            </h1>
+            <p className="text-gray-500 text-xs">
+              Search, filter, and analyze every tracked LEGO set
+            </p>
           </div>
-          <button onClick={() => { setCompareMode(!compareMode); setCompareList([]) }}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all
-              ${compareMode ? 'bg-lego-blue/20 text-lego-blue border border-lego-blue/30' : 'glass text-gray-400 hover:text-white'}`}>
-            <GitCompareArrows size={14} /> {compareMode ? 'Exit Compare' : 'Compare Mode'}
+
+          <button
+            onClick={() => { setCompareMode(!compareMode); setCompareList([]) }}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-[11px] sm:text-xs font-medium whitespace-nowrap shrink-0 transition-all
+              ${compareMode ? 'bg-lego-blue/20 text-lego-blue border border-lego-blue/30' : 'glass text-gray-400 hover:text-white'}`}
+          >
+            <GitCompareArrows size={14} /> {compareMode ? 'Exit Compare' : 'Compare'}
           </button>
         </div>
 
