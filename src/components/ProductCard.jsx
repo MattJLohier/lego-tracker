@@ -71,7 +71,7 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
     || product.thumbnail_url || product.image || product.product_image_url || null
 
   const storeUrl = legoStoreUrl(product)
-  const hasDiscount = discount_usd && Number(discount_usd) > 0
+  const hasDiscount = !!discount_usd && Number(discount_usd) > 0
   const salePct = sale_percentage ? Number(sale_percentage) : (hasDiscount && list_price_usd && Number(list_price_usd) > 0)
     ? Math.round((Number(discount_usd) / Number(list_price_usd)) * 100) : 0
 
@@ -215,10 +215,10 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
 
           {/* Micro stats row */}
           <div className="flex items-center gap-2.5 text-[10px] text-gray-400 mb-3">
-            {piece_count && Number(piece_count) > 0 && (
+            {!!piece_count && Number(piece_count) > 0 && (
               <span className="flex items-center gap-0.5"><Package size={10} />{Number(piece_count).toLocaleString()}</span>
             )}
-            {rating && <span className="flex items-center gap-0.5"><Star size={10} className="text-lego-yellow fill-lego-yellow" />{Number(rating).toFixed(1)}</span>}
+            {!!rating && <span className="flex items-center gap-0.5"><Star size={10} className="text-lego-yellow fill-lego-yellow" />{Number(rating).toFixed(1)}</span>}
             {price_per_piece && Number(price_per_piece) > 0 && Number(price_per_piece) < 50 && (
               <span className="flex items-center gap-0.5"><Tag size={10} />${Number(price_per_piece).toFixed(2)}/pc</span>
             )}
