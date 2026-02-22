@@ -22,10 +22,12 @@
  *   POST /api/reports                    → create profile  (body = JSON)
  *   GET  /api/reports/delete/:id         → delete profile
  *   GET  /api/reports/history?limit=     → report generation history
- *   GET  /api/reports/preview/:id        → preview report HTML for profile
+ *   GET  /api/reports/history/:id/html   → view historical report HTML
+ *   GET  /api/reports/preview/:id        → preview report HTML for profile (uses profile settings)
  *   GET  /api/reports/preview?type=daily → preview generic report HTML
- *   GET  /api/reports/generate/:id       → generate report for profile
+ *   GET  /api/reports/generate/:id?send= → generate report for profile
  *   GET  /api/reports/generate?type=daily→ generate generic report
+ *   GET  /api/reports/generate-all?freq= → generate all scheduled reports
  *   GET  /api/reports/stats              → report system stats
  *
  *   ── Time Series ──
@@ -69,7 +71,12 @@ async function apiFetch(path, options = {}) {
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       console.warn(`Pipeline API ${res.status} at ${url}${body ? ` — ${body.slice(0, 200)}` : ''}`)
-      return null
+      // Try to parse error body for rate limit messages etc.
+      try {
+        return JSON.parse(body)
+      } catch {
+        return null
+      }
     }
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('application/json')) return res.json()
@@ -94,7 +101,6 @@ export async function getAlertSubscriptions(email) {
 }
 
 export async function createAlertSubscription(subscription) {
-  // POST /api/alerts  (server also accepts /api/alerts/create)
   return apiFetch('/api/alerts', {
     method: 'POST',
     body: JSON.stringify(subscription),
@@ -102,7 +108,6 @@ export async function createAlertSubscription(subscription) {
 }
 
 export async function deleteAlertSubscription(id) {
-  // Server uses GET-style delete
   return apiFetch(`/api/alerts/delete/${id}`)
 }
 
@@ -128,13 +133,11 @@ export async function evaluateAlerts() {
 // ─── Reports ─────────────────────────────────────────────────
 
 export async function getReportProfiles(email) {
-  // GET /api/reports  (server also accepts /api/reports/profiles)
   const q = email ? `?email=${encodeURIComponent(email)}` : ''
   return apiFetch(`/api/reports${q}`)
 }
 
 export async function createReportProfile(profile) {
-  // POST /api/reports  (server also accepts /api/reports/create)
   return apiFetch('/api/reports', {
     method: 'POST',
     body: JSON.stringify(profile),
@@ -155,6 +158,8 @@ export async function getReportStats() {
 
 /**
  * Preview a report as HTML.
+ * When given a profile ID (number), the backend generates using that profile's
+ * settings (sections, theme filter, length) so the preview matches the user's config.
  * @param {number|string} profileIdOrType - profile ID (number) or type string ("daily"/"weekly")
  * @returns {Promise<{html: string}|null>}
  */
@@ -165,7 +170,6 @@ export async function previewReport(profileIdOrType) {
     ? `/api/reports/preview/${profileIdOrType}`
     : `/api/reports/preview?type=${encodeURIComponent(profileIdOrType || 'daily')}`
 
-  // This endpoint returns HTML, not JSON
   try {
     const res = await fetch(`${API_BASE}${url}`)
     if (!res.ok) return null
@@ -177,7 +181,29 @@ export async function previewReport(profileIdOrType) {
 }
 
 /**
+ * Retrieve the HTML content of a previously generated report from history.
+ * @param {number} historyId - report_history row ID
+ * @returns {Promise<{html: string}|null>}
+ */
+export async function getReportHistoryHtml(historyId) {
+  try {
+    const res = await fetch(`${API_BASE}/api/reports/history/${historyId}/html`)
+    if (!res.ok) {
+      // Try JSON error
+      const body = await res.text().catch(() => '')
+      console.warn(`Report history HTML ${res.status}: ${body.slice(0, 200)}`)
+      return null
+    }
+    const html = await res.text()
+    return { html }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Generate (and optionally send) a report.
+ * Backend enforces rate limiting — returns error with "rate limit" if exceeded.
  * @param {number|string} profileIdOrType - profile ID or type string
  * @param {boolean} sendEmail - whether to actually email it
  */

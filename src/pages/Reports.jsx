@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   FileText, Plus, Trash2, Mail, Clock, Send, Zap, TrendingDown,
   ShoppingBag, Sparkles, AlertTriangle, Tag, BarChart3, X, Check,
-  Power, RefreshCw, Calendar, Activity, PlayCircle, Filter, Crown, Eye
+  Power, RefreshCw, Calendar, Activity, Filter, Crown, Eye, ChevronDown,
+  ChevronUp, Settings, Bell
 } from 'lucide-react'
 import { useReportProfiles } from '../hooks/usePipeline'
 import { useAuth } from '../hooks/useAuth'
@@ -13,19 +14,19 @@ import { UpgradeModal, UpgradeBanner, UsageMeter } from '../components/UpgradeMo
 import * as api from '../lib/api'
 
 const SECTIONS = [
-  { key: 'price_drops', label: 'Price Drops', icon: TrendingDown, color: 'text-green-400' },
-  { key: 'price_increases', label: 'Price Increases', icon: TrendingDown, color: 'text-red-400' },
-  { key: 'new_products', label: 'New Products', icon: Sparkles, color: 'text-lego-blue' },
-  { key: 'stock_alerts', label: 'Stock Changes', icon: ShoppingBag, color: 'text-orange-400' },
-  { key: 'on_sale', label: 'Current Sales', icon: Tag, color: 'text-lego-yellow' },
-  { key: 'retiring', label: 'Retirement Risk', icon: AlertTriangle, color: 'text-red-400' },
-  { key: 'market_stats', label: 'Market Stats', icon: BarChart3, color: 'text-purple-400' },
+  { key: 'price_drops', label: 'Price Drops', icon: TrendingDown, color: 'text-green-400', dbKey: 'include_price_changes' },
+  { key: 'price_increases', label: 'Price Increases', icon: TrendingDown, color: 'text-red-400', dbKey: 'include_price_changes' },
+  { key: 'new_products', label: 'New Products', icon: Sparkles, color: 'text-lego-blue', dbKey: 'include_new_products' },
+  { key: 'stock_alerts', label: 'Stock Changes', icon: ShoppingBag, color: 'text-orange-400', dbKey: 'include_stock_changes' },
+  { key: 'on_sale', label: 'Current Sales', icon: Tag, color: 'text-lego-yellow', dbKey: 'include_new_deals' },
+  { key: 'retiring', label: 'Retirement Risk', icon: AlertTriangle, color: 'text-red-400', dbKey: 'include_retirement_risk' },
+  { key: 'market_stats', label: 'Market Stats', icon: BarChart3, color: 'text-purple-400', dbKey: 'include_market_stats' },
 ]
 
 const PRESETS = [
-  { name: 'Daily LEGO Market Brief', freq: 'daily', length: 'brief', sections: ['price_drops', 'new_products', 'stock_alerts', 'market_stats'] },
+  { name: 'Weekly Market Brief', freq: 'weekly', length: 'brief', sections: ['price_drops', 'new_products', 'stock_alerts', 'market_stats'] },
   { name: 'Weekly Price Movers', freq: 'weekly', length: 'standard', sections: ['price_drops', 'price_increases', 'on_sale'] },
-  { name: 'New Releases Digest', freq: 'daily', length: 'standard', sections: ['new_products', 'market_stats'] },
+  { name: 'New Releases Digest', freq: 'weekly', length: 'standard', sections: ['new_products', 'market_stats'] },
 ]
 
 const TABS = [
@@ -34,28 +35,77 @@ const TABS = [
   { id: 'stats', label: 'Dashboard', icon: Activity },
 ]
 
+// Hour options for delivery time picker
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const ampm = i < 12 ? 'AM' : 'PM'
+  const h = i === 0 ? 12 : i > 12 ? i - 12 : i
+  return { value: i, label: `${h}:00 ${ampm}` }
+})
+
+function getLengthLabel(maxItems) {
+  if (maxItems == null) return 'standard'
+  const n = parseInt(maxItems)
+  if (n <= 5) return 'brief'
+  if (n >= 15) return 'detailed'
+  return 'standard'
+}
+
+function formatDeliveryTime(hour) {
+  if (hour == null) return null
+  const h = parseInt(hour)
+  const ampm = h < 12 ? 'AM' : 'PM'
+  const display = h === 0 ? 12 : h > 12 ? h - 12 : h
+  return `${display}:00 ${ampm}`
+}
+
+function getSectionsFromProfile(prof) {
+  const result = []
+  if (prof.include_price_changes) { result.push('price_drops'); result.push('price_increases') }
+  if (prof.include_new_products) result.push('new_products')
+  if (prof.include_stock_changes) result.push('stock_alerts')
+  if (prof.include_new_deals) result.push('on_sale')
+  if (prof.include_retirement_risk) result.push('retiring')
+  if (prof.include_market_stats) result.push('market_stats')
+  return result
+}
+
 export default function Reports() {
   const { user } = useAuth()
   const hook = useReportProfiles()
   const [tab, setTab] = useState('profiles')
   const [showUpgrade, setShowUpgrade] = useState(false)
-  const [samplePreview, setSamplePreview] = useState(null)
-  const [sampleLabel, setSampleLabel] = useState('')
+  const [previewData, setPreviewData] = useState(null)
+  const [previewLabel, setPreviewLabel] = useState('')
 
-  // Sample preview uses the public weekly report endpoint (stale/cached data)
-  // This prevents users from getting fresh daily-quality data on demand
-  const handleSamplePreview = async (profileName) => {
-    setSampleLabel(profileName || 'Report')
-    setSamplePreview(null)
-    setTab('sample')
+  // Preview a specific profile — uses profile ID so backend applies settings
+  const handleProfilePreview = async (profileId, profileName) => {
+    setPreviewLabel(profileName || 'Report')
+    setPreviewData(null)
+    setTab('preview')
     try {
-      const r = await api.previewReport('weekly')
-      setSamplePreview(
+      const r = await api.previewReport(profileId)
+      setPreviewData(
         r?.html ||
         '<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Preview unavailable — pipeline server offline</div>'
       )
     } catch {
-      setSamplePreview('<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Preview unavailable</div>')
+      setPreviewData('<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Preview unavailable</div>')
+    }
+  }
+
+  // View a historical report's HTML
+  const handleViewHistoryReport = async (historyId, profileName) => {
+    setPreviewLabel(profileName || 'Report')
+    setPreviewData(null)
+    setTab('preview')
+    try {
+      const r = await api.getReportHistoryHtml(historyId)
+      setPreviewData(
+        r?.html ||
+        '<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Report content not available</div>'
+      )
+    } catch {
+      setPreviewData('<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Could not load report</div>')
     }
   }
 
@@ -84,7 +134,7 @@ export default function Reports() {
               key={id}
               onClick={() => setTab(id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                tab === id
+                (tab === id || (tab === 'preview' && id === 'profiles'))
                   ? 'bg-lego-red text-white shadow-lg shadow-lego-red/20'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
@@ -100,10 +150,10 @@ export default function Reports() {
           ))}
         </div>
 
-        {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onUpgrade={() => setShowUpgrade(true)} onSamplePreview={handleSamplePreview} />}
-        {tab === 'history' && <HistoryTab hook={hook} />}
+        {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onUpgrade={() => setShowUpgrade(true)} onPreview={handleProfilePreview} />}
+        {tab === 'history' && <HistoryTab hook={hook} onViewReport={handleViewHistoryReport} />}
         {tab === 'stats' && <StatsTab />}
-        {tab === 'sample' && <SamplePreviewTab html={samplePreview} label={sampleLabel} onClose={() => { setSamplePreview(null); setTab('profiles') }} />}
+        {tab === 'preview' && <ReportPreviewTab html={previewData} label={previewLabel} onClose={() => { setPreviewData(null); setTab('profiles') }} />}
       </div>
 
       <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} feature="More reports" />
@@ -114,13 +164,13 @@ export default function Reports() {
 
 /* ─── Profiles Tab ─────────────────────────────── */
 
-function ProfilesTab({ user, hook, onUpgrade, onSamplePreview }) {
+function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
   const { profiles, loading, createProfile, deleteProfile, generateReport } = hook
   const sub = useSubscription()
   const [showForm, setShowForm] = useState(false)
   const [confirmDel, setConfirmDel] = useState(null)
-  const [sending, setSending] = useState(null)
-  const [generatingAll, setGeneratingAll] = useState(false)
+  const [sendState, setSendState] = useState({}) // { [id]: 'sending' | 'done' | 'cooldown' }
+  const [expandedCard, setExpandedCard] = useState(null)
   const themes = useThemeList()
 
   if (!user) {
@@ -143,16 +193,24 @@ function ProfilesTab({ user, hook, onUpgrade, onSamplePreview }) {
   }
 
   const handleSend = async (id) => {
-    setSending(id)
-    await generateReport(id)
-    setTimeout(() => setSending(null), 2000)
-  }
+    // Check cooldown — prevent spam
+    const state = sendState[id]
+    if (state === 'sending' || state === 'cooldown') return
 
-  const handleGenerateAll = async (frequency) => {
-    setGeneratingAll(true)
-    await api.generateAllReports(frequency)
-    await hook.refresh()
-    setTimeout(() => setGeneratingAll(false), 1500)
+    setSendState(prev => ({ ...prev, [id]: 'sending' }))
+    try {
+      const result = await api.generateReport(id, true)
+      if (result?.error?.includes('rate limit') || result?.error?.includes('cooldown')) {
+        setSendState(prev => ({ ...prev, [id]: 'cooldown' }))
+        setTimeout(() => setSendState(prev => ({ ...prev, [id]: null })), 5000)
+        return
+      }
+      setSendState(prev => ({ ...prev, [id]: 'done' }))
+      hook.refresh()
+      setTimeout(() => setSendState(prev => ({ ...prev, [id]: null })), 3000)
+    } catch {
+      setSendState(prev => ({ ...prev, [id]: null }))
+    }
   }
 
   return (
@@ -160,43 +218,14 @@ function ProfilesTab({ user, hook, onUpgrade, onSamplePreview }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="font-display font-semibold text-sm text-gray-300">Report Profiles</h2>
-          <p className="text-[10px] text-gray-500 mt-0.5">{profiles.length} configured</p>
+          <p className="text-[10px] text-gray-500 mt-0.5">{profiles.length} configured · Reports are generated and emailed on your chosen schedule</p>
         </div>
-        <div className="flex items-center gap-2">
-          {profiles.length > 0 && (
-            <div className="flex items-center gap-1">
-              {sub.isPro ? (
-                <button
-                  onClick={() => handleGenerateAll('daily')}
-                  disabled={generatingAll}
-                  className="flex items-center gap-1.5 px-3 py-1.5 glass text-gray-400 hover:text-lego-green hover:border-lego-green/20 text-[11px] font-semibold rounded-lg transition-all disabled:opacity-50"
-                  title="Generate all daily reports now"
-                >
-                  {generatingAll
-                    ? <span className="animate-spin w-3 h-3 border-2 border-gray-400/30 border-t-lego-green rounded-full" />
-                    : <PlayCircle size={13} />}
-                  Run Daily
-                </button>
-              ) : (
-                <button
-                  onClick={onUpgrade}
-                  className="flex items-center gap-1.5 px-3 py-1.5 glass text-gray-500 text-[11px] font-semibold rounded-lg transition-all hover:border-lego-yellow/20"
-                  title="Upgrade to Pro for daily reports"
-                >
-                  <Crown size={12} className="text-lego-yellow" />
-                  Run Daily
-                  <span className="text-[8px] text-lego-yellow font-bold">PRO</span>
-                </button>
-              )}
-            </div>
-          )}
-          <button
-            onClick={handleNewReport}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-yellow hover:bg-yellow-600 text-black text-xs font-semibold rounded-lg transition-colors"
-          >
-            <Plus size={14} /> New Report
-          </button>
-        </div>
+        <button
+          onClick={handleNewReport}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-yellow hover:bg-yellow-600 text-black text-xs font-semibold rounded-lg transition-colors"
+        >
+          <Plus size={14} /> New Report
+        </button>
       </div>
 
       {/* Usage meter */}
@@ -262,49 +291,168 @@ function ProfilesTab({ user, hook, onUpgrade, onSamplePreview }) {
       )}
 
       {/* Profile cards */}
-      {loading ? <LoadingSkeleton /> : profiles.map(prof => (
-        <div key={prof.id} className={`glass rounded-xl p-4 transition-colors ${prof.active !== false ? 'hover:bg-white/[0.02]' : 'opacity-60'}`}>
-          <div className="flex items-start gap-3">
-            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${prof.active !== false ? 'bg-lego-yellow/10 text-lego-yellow' : 'bg-gray-800 text-gray-600'}`}>
-              <FileText size={16} />
+      {loading ? <LoadingSkeleton /> : profiles.map(prof => {
+        const isExpanded = expandedCard === prof.id
+        const sections = prof.sections || getSectionsFromProfile(prof)
+        const lengthLabel = getLengthLabel(prof.max_items_per_section)
+        const deliveryTime = formatDeliveryTime(prof.delivery_hour)
+        const themeFilter = prof.themes?.[0] || prof.theme_filter || null
+        const state = sendState[prof.id]
+        const lastSent = prof.last_sent_at || prof.last_generated_at
+
+        return (
+          <div key={prof.id} className={`glass rounded-xl transition-colors ${prof.enabled !== false && prof.active !== false ? 'hover:bg-white/[0.02]' : 'opacity-60'}`}>
+            {/* Main card row */}
+            <div className="p-4">
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${prof.enabled !== false && prof.active !== false ? 'bg-lego-yellow/10 text-lego-yellow' : 'bg-gray-800 text-gray-600'}`}>
+                  <FileText size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-sm text-white font-semibold">{prof.name}</span>
+                    {(prof.enabled === false || prof.active === false) && (
+                      <span className="px-1.5 py-0.5 bg-gray-800 rounded text-[8px] font-semibold text-gray-500 uppercase">Paused</span>
+                    )}
+                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-semibold uppercase ${
+                      (prof.frequency || 'weekly') === 'daily' ? 'bg-lego-yellow/15 text-lego-yellow' : 'bg-lego-blue/15 text-lego-blue'
+                    }`}>
+                      {prof.frequency || 'weekly'}
+                    </span>
+                  </div>
+
+                  {/* Key settings row */}
+                  <div className="flex gap-1.5 flex-wrap mb-2">
+                    {(Array.isArray(sections) ? sections : []).slice(0, 4).map(s => {
+                      const info = SECTIONS.find(x => x.key === s)
+                      return info ? <span key={s} className={`px-1.5 py-0.5 bg-white/5 rounded text-[8px] font-semibold ${info.color}`}>{info.label}</span> : null
+                    })}
+                    {sections.length > 4 && (
+                      <span className="px-1.5 py-0.5 bg-white/5 rounded text-[8px] font-semibold text-gray-500">+{sections.length - 4} more</span>
+                    )}
+                  </div>
+
+                  {/* Info row */}
+                  <div className="flex items-center gap-3 text-[10px] text-gray-500 flex-wrap">
+                    <span className="flex items-center gap-1"><Mail size={10} />{prof.email}</span>
+                    <span className="flex items-center gap-1">
+                      <Clock size={10} />
+                      {deliveryTime || '9:00 AM'} UTC
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded ${
+                      lengthLabel === 'brief' ? 'bg-green-500/10 text-green-400' :
+                      lengthLabel === 'detailed' ? 'bg-purple-500/10 text-purple-400' :
+                      'bg-white/5 text-gray-400'
+                    }`}>
+                      {lengthLabel}
+                    </span>
+                    {themeFilter && (
+                      <span className="flex items-center gap-1"><Filter size={10} />{themeFilter}</span>
+                    )}
+                    {lastSent && (
+                      <span className="text-gray-600">
+                        Last sent {new Date(lastSent).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => onPreview(prof.id, prof.name)}
+                    className="p-1.5 text-gray-600 hover:text-lego-blue rounded-lg transition-colors"
+                    title="Preview Report"
+                  >
+                    <Eye size={13} />
+                  </button>
+                  <button
+                    onClick={() => handleSend(prof.id)}
+                    disabled={state === 'sending' || state === 'cooldown'}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      state === 'cooldown' ? 'text-orange-400 cursor-not-allowed' :
+                      state === 'done' ? 'text-green-400' :
+                      state === 'sending' ? 'text-gray-600' :
+                      'text-gray-600 hover:text-lego-green'
+                    }`}
+                    title={state === 'cooldown' ? 'Rate limited — try again later' : 'Send Now'}
+                  >
+                    {state === 'sending' ? (
+                      <span className="block animate-spin w-3.5 h-3.5 border-2 border-gray-600/30 border-t-lego-green rounded-full" />
+                    ) : state === 'done' ? (
+                      <Check size={13} />
+                    ) : state === 'cooldown' ? (
+                      <Clock size={13} />
+                    ) : (
+                      <Send size={13} />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setExpandedCard(isExpanded ? null : prof.id)}
+                    className="p-1.5 text-gray-600 hover:text-gray-300 rounded-lg transition-colors"
+                    title="Details"
+                  >
+                    {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
+                  {confirmDel === prof.id ? (
+                    <>
+                      <button onClick={async () => { await deleteProfile(prof.id); setConfirmDel(null); sub.refresh() }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Del</button>
+                      <button onClick={() => setConfirmDel(null)} className="px-2 py-1 glass text-gray-400 text-[10px] rounded-md">No</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmDel(prof.id)} className="p-1.5 text-gray-600 hover:text-red-400 rounded-lg transition-colors"><Trash2 size={13} /></button>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm text-white font-semibold">{prof.name}</span>
-                {prof.active === false && (
-                  <span className="px-1.5 py-0.5 bg-gray-800 rounded text-[8px] font-semibold text-gray-500 uppercase">Paused</span>
+
+            {/* Expanded details */}
+            {isExpanded && (
+              <div className="px-4 pb-4 pt-0 border-t border-lego-border/30">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+                  <DetailItem icon={Settings} label="Length" value={`${lengthLabel} (${prof.max_items_per_section || 10} items/section)`} />
+                  <DetailItem icon={Clock} label="Delivery" value={`${prof.frequency || 'weekly'} at ${deliveryTime || '9:00 AM'} UTC`} />
+                  <DetailItem icon={Filter} label="Theme" value={themeFilter || 'All themes'} />
+                  <DetailItem icon={Bell} label="Status" value={prof.enabled !== false && prof.active !== false ? 'Active' : 'Paused'} />
+                </div>
+                <div className="mt-3">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-gray-600 block mb-1.5">Included Sections</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {SECTIONS.map(({ key, label, icon: Icon, color }) => {
+                      const included = sections.includes(key)
+                      return (
+                        <span key={key} className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-semibold ${
+                          included ? `bg-white/5 ${color}` : 'bg-white/[0.02] text-gray-700 line-through'
+                        }`}>
+                          <Icon size={10} />
+                          {label}
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+                {prof.created_at && (
+                  <p className="text-[9px] text-gray-600 mt-3">
+                    Created {new Date(prof.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
                 )}
               </div>
-              <div className="flex gap-1 flex-wrap mb-1.5">
-                {(prof.sections || []).map(s => {
-                  const info = SECTIONS.find(x => x.key === s)
-                  return info ? <span key={s} className={`px-1.5 py-0.5 bg-white/5 rounded text-[8px] font-semibold ${info.color}`}>{info.label}</span> : null
-                })}
-              </div>
-              <div className="flex items-center gap-3 text-[10px] text-gray-500 flex-wrap">
-                <span className="flex items-center gap-1"><Mail size={10} />{prof.email}</span>
-                <span className="flex items-center gap-1"><Clock size={10} />{prof.freq || prof.frequency || 'daily'}</span>
-                <span>{(prof.max_items_per_section <= 5) ? 'brief' : (prof.max_items_per_section >= 15) ? 'detailed' : 'standard'}</span>
-                {prof.theme_filter && <span className="flex items-center gap-1"><Filter size={10} />{prof.theme_filter}</span>}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button onClick={() => onSamplePreview(prof.name)} className="p-1.5 text-gray-600 hover:text-lego-blue rounded-lg transition-colors" title="Sample Preview"><Eye size={13} /></button>
-              <button onClick={() => handleSend(prof.id)} disabled={sending === prof.id} className="p-1.5 text-gray-600 hover:text-lego-green rounded-lg transition-colors" title="Send Now">
-                {sending === prof.id ? <Check size={13} className="text-green-400" /> : <Send size={13} />}
-              </button>
-              {confirmDel === prof.id ? (
-                <>
-                  <button onClick={async () => { await deleteProfile(prof.id); setConfirmDel(null); sub.refresh() }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Del</button>
-                  <button onClick={() => setConfirmDel(null)} className="px-2 py-1 glass text-gray-400 text-[10px] rounded-md">No</button>
-                </>
-              ) : (
-                <button onClick={() => setConfirmDel(prof.id)} className="p-1.5 text-gray-600 hover:text-red-400 rounded-lg transition-colors"><Trash2 size={13} /></button>
-              )}
-            </div>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
+    </div>
+  )
+}
+
+function DetailItem({ icon: Icon, label, value }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon size={12} className="text-gray-600 shrink-0" />
+      <div>
+        <span className="text-[9px] text-gray-600 block">{label}</span>
+        <span className="text-[11px] text-gray-300">{value}</span>
+      </div>
     </div>
   )
 }
@@ -319,9 +467,9 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
   const [length, setLength] = useState('brief')
   const [sections, setSections] = useState(['price_drops', 'new_products', 'market_stats'])
   const [themeFilter, setThemeFilter] = useState('')
+  const [deliveryHour, setDeliveryHour] = useState(9) // 9 AM UTC default
   const [submitting, setSubmitting] = useState(false)
 
-  // Email is locked to the user's registered email — no sharing
   const email = defaultEmail
 
   const toggleSection = (key) => setSections(prev => prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key])
@@ -331,7 +479,16 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
   const handleCreate = async () => {
     if (!name || !email || sections.length === 0) return
     setSubmitting(true)
-    await onCreate({ name, email, frequency: freq, max_items: lengthToMaxItems[length] || 10, sections, themes: themeFilter ? [themeFilter] : null, active: true })
+    await onCreate({
+      name,
+      email,
+      frequency: freq,
+      max_items: lengthToMaxItems[length] || 10,
+      sections,
+      themes: themeFilter ? [themeFilter] : null,
+      delivery_hour: deliveryHour,
+      active: true,
+    })
     setSubmitting(false)
   }
 
@@ -354,7 +511,7 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
           <p className="text-[9px] text-gray-600 mt-1">Reports are sent to your registered email only.</p>
         </div>
       </div>
-      <div className="grid sm:grid-cols-3 gap-4 mb-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <div>
           <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-2 block">Frequency</label>
           <div className="flex gap-2 items-center">
@@ -391,6 +548,18 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
           </div>
         </div>
         <div>
+          <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-2 block">Delivery Time <span className="text-gray-600">(UTC)</span></label>
+          <select
+            value={deliveryHour}
+            onChange={e => setDeliveryHour(parseInt(e.target.value))}
+            className="w-full bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lego-yellow"
+          >
+            {HOUR_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-1 block">Theme Filter <span className="text-gray-600">(optional)</span></label>
           <select value={themeFilter} onChange={e => setThemeFilter(e.target.value)} className="w-full bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-lego-yellow">
             <option value="">All themes</option>
@@ -411,7 +580,7 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
         </div>
       </div>
       <div className="flex items-center justify-between pt-3 border-t border-lego-border/50">
-        <p className="text-[10px] text-gray-500">Reports generated and emailed on the configured schedule.</p>
+        <p className="text-[10px] text-gray-500">Reports generated and emailed at {formatDeliveryTime(deliveryHour)} UTC {freq}.</p>
         <div className="flex gap-2">
           <button onClick={onCancel} className="px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white">Cancel</button>
           <button onClick={handleCreate} disabled={!name || !email || sections.length === 0 || submitting}
@@ -428,7 +597,7 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
 
 /* ─── History Tab ──────────────────────────────── */
 
-function HistoryTab({ hook }) {
+function HistoryTab({ hook, onViewReport }) {
   const { history, loading } = hook
   const [filterStatus, setFilterStatus] = useState('all')
 
@@ -439,18 +608,19 @@ function HistoryTab({ hook }) {
       <div className="glass rounded-xl p-10 text-center">
         <Clock size={36} className="text-gray-600 mx-auto mb-3" />
         <h3 className="font-display font-semibold text-sm text-gray-300 mb-1">No reports generated yet</h3>
-        <p className="text-[11px] text-gray-500">Delivery history will appear here.</p>
+        <p className="text-[11px] text-gray-500">Delivery history will appear here. Reports you receive via email can be viewed again.</p>
       </div>
     )
   }
 
   const statusCounts = history.reduce((acc, h) => {
-    const s = h.status || 'sent'
+    const s = h.status || (h.email_sent ? 'sent' : h.error ? 'error' : 'generated')
     acc[s] = (acc[s] || 0) + 1
     return acc
   }, {})
 
-  const filtered = filterStatus === 'all' ? history : history.filter(h => (h.status || 'sent') === filterStatus)
+  const getStatus = (h) => h.status || (h.email_sent ? 'sent' : h.error ? 'error' : 'generated')
+  const filtered = filterStatus === 'all' ? history : history.filter(h => getStatus(h) === filterStatus)
 
   return (
     <div className="space-y-4">
@@ -478,24 +648,41 @@ function HistoryTab({ hook }) {
       {/* History entries */}
       <div className="space-y-2">
         {filtered.map((h, i) => {
-          const statusColor = h.status === 'error' ? 'text-red-400' : h.status === 'pending' ? 'text-orange-400' : 'text-green-400'
+          const status = getStatus(h)
+          const statusColor = status === 'error' ? 'text-red-400' : status === 'sent' ? 'text-green-400' : 'text-orange-400'
+          const hasHtml = h.has_html !== false // assume viewable unless explicitly false
           return (
-            <div key={h.id || i} className="glass rounded-lg p-3 hover:bg-white/[0.02] transition-colors group">
+            <div
+              key={h.id || i}
+              onClick={() => hasHtml && h.id && onViewReport(h.id, h.profile_name || h.name)}
+              className={`glass rounded-lg p-3 transition-colors group ${
+                hasHtml && h.id ? 'hover:bg-white/[0.03] cursor-pointer hover:border-lego-yellow/20 border border-transparent' : ''
+              }`}
+            >
               <div className="flex items-center gap-3">
                 <div className="p-1.5 rounded-lg bg-lego-yellow/10"><Mail size={14} className="text-lego-yellow" /></div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-white font-medium">{h.profile_name || h.name || 'Report'}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-semibold uppercase bg-white/5 ${statusColor}`}>{h.status || 'sent'}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-semibold uppercase bg-white/5 ${statusColor}`}>{status}</span>
+                    {h.item_count != null && (
+                      <span className="text-[8px] text-gray-600">{h.item_count} items</span>
+                    )}
                   </div>
                   <div className="text-[10px] text-gray-500 mt-0.5">
-                    {h.email}{h.frequency && <span className="ml-2">· {h.frequency}</span>}
+                    {h.email}{h.report_type && <span className="ml-2">· {h.report_type}</span>}
+                    {h.sections_included && Array.isArray(h.sections_included) && (
+                      <span className="ml-2">· {h.sections_included.length} sections</span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-gray-600 whitespace-nowrap">
                     {h.generated_at ? new Date(h.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
                   </span>
+                  {hasHtml && h.id && (
+                    <Eye size={12} className="text-gray-700 group-hover:text-lego-yellow transition-colors" />
+                  )}
                 </div>
               </div>
             </div>
@@ -538,13 +725,12 @@ function StatsTab() {
   const statCards = [
     { label: 'Total Profiles', value: stats.total_profiles ?? stats.profiles_count ?? '-', icon: FileText, color: 'text-lego-yellow', bg: 'bg-lego-yellow/10' },
     { label: 'Active Profiles', value: stats.active_profiles ?? stats.active_count ?? '-', icon: Power, color: 'text-lego-green', bg: 'bg-lego-green/10' },
-    { label: 'Reports Sent', value: stats.total_reports_sent ?? stats.reports_sent ?? stats.total_generated ?? '-', icon: Send, color: 'text-lego-blue', bg: 'bg-lego-blue/10' },
+    { label: 'Reports Sent', value: stats.total_reports_sent ?? stats.reports_sent ?? stats.total_reports_generated ?? '-', icon: Send, color: 'text-lego-blue', bg: 'bg-lego-blue/10' },
     { label: 'Last Generated', value: stats.last_generated ? new Date(stats.last_generated).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-', icon: Calendar, color: 'text-purple-400', bg: 'bg-purple-400/10' },
   ]
 
   return (
     <div className="space-y-5">
-      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="glass rounded-xl p-4">
@@ -557,7 +743,6 @@ function StatsTab() {
         ))}
       </div>
 
-      {/* Frequency breakdown */}
       {(stats.daily_count != null || stats.weekly_count != null) && (
         <div className="glass rounded-xl p-5">
           <h3 className="font-display font-semibold text-xs text-gray-400 uppercase tracking-wider mb-3">Schedule Breakdown</h3>
@@ -568,7 +753,6 @@ function StatsTab() {
         </div>
       )}
 
-      {/* Recent activity */}
       {stats.recent_reports && stats.recent_reports.length > 0 && (
         <div className="glass rounded-xl p-5">
           <h3 className="font-display font-semibold text-xs text-gray-400 uppercase tracking-wider mb-3">Recent Activity</h3>
@@ -582,21 +766,6 @@ function StatsTab() {
                 <span className="text-[10px] text-gray-600">
                   {r.generated_at ? new Date(r.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
                 </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Email delivery stats */}
-      {stats.email_stats && (
-        <div className="glass rounded-xl p-5">
-          <h3 className="font-display font-semibold text-xs text-gray-400 uppercase tracking-wider mb-3">Email Delivery</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {Object.entries(stats.email_stats).map(([key, val]) => (
-              <div key={key} className="text-center">
-                <div className="text-lg font-display font-bold text-white">{val}</div>
-                <div className="text-[10px] text-gray-500 capitalize">{key.replace(/_/g, ' ')}</div>
               </div>
             ))}
           </div>
@@ -622,26 +791,26 @@ function FrequencyBar({ label, count, total, color }) {
 }
 
 
-/* ─── Sample Preview Tab ──────────────────────── */
+/* ─── Report Preview Tab (used for both profile preview & history view) ─── */
 
-function SamplePreviewTab({ html, label, onClose }) {
+function ReportPreviewTab({ html, label, onClose }) {
   if (!html) {
     return (
       <div className="glass rounded-xl p-10 text-center">
         <div className="flex flex-col items-center gap-3">
           <div className="animate-spin w-6 h-6 border-2 border-gray-600 border-t-lego-yellow rounded-full" />
-          <p className="text-[11px] text-gray-500">Loading sample preview...</p>
+          <p className="text-[11px] text-gray-500">Loading report...</p>
         </div>
       </div>
     )
   }
 
-  if (html.includes('Preview unavailable') || html.includes('Pipeline offline')) {
+  if (html.includes('Preview unavailable') || html.includes('Pipeline offline') || html.includes('not available')) {
     return (
       <div className="glass rounded-xl p-10 text-center">
         <Eye size={36} className="text-gray-600 mx-auto mb-3" />
-        <h3 className="font-display font-semibold text-sm text-gray-300 mb-1">Preview unavailable</h3>
-        <p className="text-[11px] text-gray-500">The pipeline server may be offline. Try again later.</p>
+        <h3 className="font-display font-semibold text-sm text-gray-300 mb-1">Report unavailable</h3>
+        <p className="text-[11px] text-gray-500">The report content could not be loaded. The pipeline server may be offline.</p>
         <button onClick={onClose} className="mt-4 px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white">Back to Reports</button>
       </div>
     )
@@ -651,23 +820,15 @@ function SamplePreviewTab({ html, label, onClose }) {
     <div className="glass rounded-xl overflow-hidden">
       <div className="p-3 border-b border-lego-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 font-mono">{label} — Sample Preview</span>
-          <span className="px-2 py-0.5 bg-lego-yellow/15 text-lego-yellow text-[9px] font-bold rounded-full uppercase">Sample Data</span>
+          <span className="text-xs text-gray-400 font-mono">{label}</span>
+          <span className="px-2 py-0.5 bg-lego-yellow/15 text-lego-yellow text-[9px] font-bold rounded-full uppercase">Preview</span>
         </div>
         <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors"><X size={14} /></button>
       </div>
-      <div className="relative">
-        {/* Watermark overlay */}
-        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center" style={{ background: 'repeating-linear-gradient(45deg, transparent, transparent 120px, rgba(255,213,0,0.03) 120px, rgba(255,213,0,0.03) 240px)' }}>
-          <div className="text-lego-yellow/10 font-display font-extrabold text-6xl tracking-widest rotate-[-30deg] select-none">
-            SAMPLE
-          </div>
-        </div>
-        <iframe srcDoc={html} className="w-full bg-white" style={{ minHeight: '700px', border: 'none' }} title="Sample Report Preview" />
-      </div>
-      <div className="p-3 border-t border-lego-border/50 bg-lego-yellow/5">
-        <p className="text-[10px] text-gray-400 text-center">
-          This is a sample preview using cached weekly data. Your actual report will contain fresh data based on your configured schedule and sections.
+      <iframe srcDoc={html} className="w-full bg-white" style={{ minHeight: '700px', border: 'none' }} title="Report Preview" />
+      <div className="p-3 border-t border-lego-border/50 bg-white/[0.02]">
+        <p className="text-[10px] text-gray-500 text-center">
+          This preview uses your configured sections, theme filter, and length settings with the latest available data.
         </p>
       </div>
     </div>
