@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  FileText, Plus, Trash2, Mail, Clock, Eye, Send, Zap, TrendingDown,
+  FileText, Plus, Trash2, Mail, Clock, Send, Zap, TrendingDown,
   ShoppingBag, Sparkles, AlertTriangle, Tag, BarChart3, X, Check,
-  Power, RefreshCw, Calendar, Activity, PlayCircle, Filter, Crown
+  Power, RefreshCw, Calendar, Activity, PlayCircle, Filter, Crown, Eye
 } from 'lucide-react'
 import { useReportProfiles } from '../hooks/usePipeline'
 import { useAuth } from '../hooks/useAuth'
@@ -32,31 +32,31 @@ const TABS = [
   { id: 'profiles', label: 'My Reports', icon: FileText },
   { id: 'history', label: 'History', icon: Clock },
   { id: 'stats', label: 'Dashboard', icon: Activity },
-  { id: 'preview', label: 'Preview', icon: Eye },
 ]
 
 export default function Reports() {
   const { user } = useAuth()
   const hook = useReportProfiles()
   const [tab, setTab] = useState('profiles')
-  const [previewHtml, setPreviewHtml] = useState(null)
-  const [previewLabel, setPreviewLabel] = useState('Report Preview')
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [samplePreview, setSamplePreview] = useState(null)
+  const [sampleLabel, setSampleLabel] = useState('')
 
-  const handlePreview = async (idOrType, label) => {
-    setPreviewHtml(null)
-    setPreviewLabel(label || 'Report Preview')
-    setTab('preview')
-    const r = await api.previewReport(idOrType)
-    setPreviewHtml(
-      r?.html ||
-      '<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Preview unavailable — pipeline server offline</div>'
-    )
-  }
-
-  const handleQuickPreview = async (type) => {
-    const label = type === 'daily' ? 'Daily Report Preview' : 'Weekly Report Preview'
-    await handlePreview(type, label)
+  // Sample preview uses the public weekly report endpoint (stale/cached data)
+  // This prevents users from getting fresh daily-quality data on demand
+  const handleSamplePreview = async (profileName) => {
+    setSampleLabel(profileName || 'Report')
+    setSamplePreview(null)
+    setTab('sample')
+    try {
+      const r = await api.previewReport('weekly')
+      setSamplePreview(
+        r?.html ||
+        '<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Preview unavailable — pipeline server offline</div>'
+      )
+    } catch {
+      setSamplePreview('<div style="padding:40px;text-align:center;color:#888;font-family:sans-serif">Preview unavailable</div>')
+    }
   }
 
   return (
@@ -75,22 +75,6 @@ export default function Reports() {
               )}
             </p>
           </div>
-          {hook.apiAvailable && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleQuickPreview('daily')}
-                className="flex items-center gap-1.5 px-3 py-1.5 glass text-gray-400 hover:text-lego-yellow hover:border-lego-yellow/20 text-[11px] font-semibold rounded-lg transition-all"
-              >
-                <Eye size={12} /> Preview Daily
-              </button>
-              <button
-                onClick={() => handleQuickPreview('weekly')}
-                className="flex items-center gap-1.5 px-3 py-1.5 glass text-gray-400 hover:text-lego-yellow hover:border-lego-yellow/20 text-[11px] font-semibold rounded-lg transition-all"
-              >
-                <Eye size={12} /> Preview Weekly
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Tabs */}
@@ -98,12 +82,7 @@ export default function Reports() {
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => {
-                setTab(id)
-                if (id === 'preview' && !previewHtml) {
-                  handleQuickPreview('daily')
-                }
-              }}
+              onClick={() => setTab(id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                 tab === id
                   ? 'bg-lego-red text-white shadow-lg shadow-lego-red/20'
@@ -121,10 +100,10 @@ export default function Reports() {
           ))}
         </div>
 
-        {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onPreview={handlePreview} onUpgrade={() => setShowUpgrade(true)} />}
-        {tab === 'history' && <HistoryTab hook={hook} onPreview={handlePreview} />}
+        {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onUpgrade={() => setShowUpgrade(true)} onSamplePreview={handleSamplePreview} />}
+        {tab === 'history' && <HistoryTab hook={hook} />}
         {tab === 'stats' && <StatsTab />}
-        {tab === 'preview' && <PreviewTab html={previewHtml} label={previewLabel} onClose={() => setPreviewHtml(null)} />}
+        {tab === 'sample' && <SamplePreviewTab html={samplePreview} label={sampleLabel} onClose={() => { setSamplePreview(null); setTab('profiles') }} />}
       </div>
 
       <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} feature="More reports" />
@@ -135,7 +114,7 @@ export default function Reports() {
 
 /* ─── Profiles Tab ─────────────────────────────── */
 
-function ProfilesTab({ user, hook, onPreview, onUpgrade }) {
+function ProfilesTab({ user, hook, onUpgrade, onSamplePreview }) {
   const { profiles, loading, createProfile, deleteProfile, generateReport } = hook
   const sub = useSubscription()
   const [showForm, setShowForm] = useState(false)
@@ -186,28 +165,29 @@ function ProfilesTab({ user, hook, onPreview, onUpgrade }) {
         <div className="flex items-center gap-2">
           {profiles.length > 0 && (
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => handleGenerateAll('daily')}
-                disabled={generatingAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 glass text-gray-400 hover:text-lego-green hover:border-lego-green/20 text-[11px] font-semibold rounded-lg transition-all disabled:opacity-50"
-                title="Generate all daily reports now"
-              >
-                {generatingAll
-                  ? <span className="animate-spin w-3 h-3 border-2 border-gray-400/30 border-t-lego-green rounded-full" />
-                  : <PlayCircle size={13} />}
-                Run Daily
-              </button>
-              <button
-                onClick={() => handleGenerateAll('weekly')}
-                disabled={generatingAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 glass text-gray-400 hover:text-lego-blue hover:border-lego-blue/20 text-[11px] font-semibold rounded-lg transition-all disabled:opacity-50"
-                title="Generate all weekly reports now"
-              >
-                {generatingAll
-                  ? <span className="animate-spin w-3 h-3 border-2 border-gray-400/30 border-t-lego-blue rounded-full" />
-                  : <PlayCircle size={13} />}
-                Run Weekly
-              </button>
+              {sub.isPro ? (
+                <button
+                  onClick={() => handleGenerateAll('daily')}
+                  disabled={generatingAll}
+                  className="flex items-center gap-1.5 px-3 py-1.5 glass text-gray-400 hover:text-lego-green hover:border-lego-green/20 text-[11px] font-semibold rounded-lg transition-all disabled:opacity-50"
+                  title="Generate all daily reports now"
+                >
+                  {generatingAll
+                    ? <span className="animate-spin w-3 h-3 border-2 border-gray-400/30 border-t-lego-green rounded-full" />
+                    : <PlayCircle size={13} />}
+                  Run Daily
+                </button>
+              ) : (
+                <button
+                  onClick={onUpgrade}
+                  className="flex items-center gap-1.5 px-3 py-1.5 glass text-gray-500 text-[11px] font-semibold rounded-lg transition-all hover:border-lego-yellow/20"
+                  title="Upgrade to Pro for daily reports"
+                >
+                  <Crown size={12} className="text-lego-yellow" />
+                  Run Daily
+                  <span className="text-[8px] text-lego-yellow font-bold">PRO</span>
+                </button>
+              )}
             </div>
           )}
           <button
@@ -309,7 +289,7 @@ function ProfilesTab({ user, hook, onPreview, onUpgrade }) {
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <button onClick={() => onPreview(prof.id, prof.name)} className="p-1.5 text-gray-600 hover:text-lego-blue rounded-lg transition-colors" title="Preview"><Eye size={13} /></button>
+              <button onClick={() => onSamplePreview(prof.name)} className="p-1.5 text-gray-600 hover:text-lego-blue rounded-lg transition-colors" title="Sample Preview"><Eye size={13} /></button>
               <button onClick={() => handleSend(prof.id)} disabled={sending === prof.id} className="p-1.5 text-gray-600 hover:text-lego-green rounded-lg transition-colors" title="Send Now">
                 {sending === prof.id ? <Check size={13} className="text-green-400" /> : <Send size={13} />}
               </button>
@@ -448,7 +428,7 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
 
 /* ─── History Tab ──────────────────────────────── */
 
-function HistoryTab({ hook, onPreview }) {
+function HistoryTab({ hook }) {
   const { history, loading } = hook
   const [filterStatus, setFilterStatus] = useState('all')
 
@@ -513,12 +493,6 @@ function HistoryTab({ hook, onPreview }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {h.profile_id && (
-                    <button onClick={() => onPreview(h.profile_id, h.profile_name || 'Report')}
-                      className="p-1 text-gray-600 hover:text-lego-blue rounded transition-colors opacity-0 group-hover:opacity-100" title="Preview">
-                      <Eye size={12} />
-                    </button>
-                  )}
                   <span className="text-[10px] text-gray-600 whitespace-nowrap">
                     {h.generated_at ? new Date(h.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
                   </span>
@@ -648,15 +622,15 @@ function FrequencyBar({ label, count, total, color }) {
 }
 
 
-/* ─── Preview Tab ──────────────────────────────── */
+/* ─── Sample Preview Tab ──────────────────────── */
 
-function PreviewTab({ html, label, onClose }) {
+function SamplePreviewTab({ html, label, onClose }) {
   if (!html) {
     return (
       <div className="glass rounded-xl p-10 text-center">
         <div className="flex flex-col items-center gap-3">
           <div className="animate-spin w-6 h-6 border-2 border-gray-600 border-t-lego-yellow rounded-full" />
-          <p className="text-[11px] text-gray-500">Loading preview...</p>
+          <p className="text-[11px] text-gray-500">Loading sample preview...</p>
         </div>
       </div>
     )
@@ -668,6 +642,7 @@ function PreviewTab({ html, label, onClose }) {
         <Eye size={36} className="text-gray-600 mx-auto mb-3" />
         <h3 className="font-display font-semibold text-sm text-gray-300 mb-1">Preview unavailable</h3>
         <p className="text-[11px] text-gray-500">The pipeline server may be offline. Try again later.</p>
+        <button onClick={onClose} className="mt-4 px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white">Back to Reports</button>
       </div>
     )
   }
@@ -675,10 +650,26 @@ function PreviewTab({ html, label, onClose }) {
   return (
     <div className="glass rounded-xl overflow-hidden">
       <div className="p-3 border-b border-lego-border/50 flex items-center justify-between">
-        <span className="text-xs text-gray-400 font-mono">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 font-mono">{label} — Sample Preview</span>
+          <span className="px-2 py-0.5 bg-lego-yellow/15 text-lego-yellow text-[9px] font-bold rounded-full uppercase">Sample Data</span>
+        </div>
         <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors"><X size={14} /></button>
       </div>
-      <iframe srcDoc={html} className="w-full bg-white" style={{ minHeight: '700px', border: 'none' }} title="Report Preview" />
+      <div className="relative">
+        {/* Watermark overlay */}
+        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center" style={{ background: 'repeating-linear-gradient(45deg, transparent, transparent 120px, rgba(255,213,0,0.03) 120px, rgba(255,213,0,0.03) 240px)' }}>
+          <div className="text-lego-yellow/10 font-display font-extrabold text-6xl tracking-widest rotate-[-30deg] select-none">
+            SAMPLE
+          </div>
+        </div>
+        <iframe srcDoc={html} className="w-full bg-white" style={{ minHeight: '700px', border: 'none' }} title="Sample Report Preview" />
+      </div>
+      <div className="p-3 border-t border-lego-border/50 bg-lego-yellow/5">
+        <p className="text-[10px] text-gray-400 text-center">
+          This is a sample preview using cached weekly data. Your actual report will contain fresh data based on your configured schedule and sections.
+        </p>
+      </div>
     </div>
   )
 }

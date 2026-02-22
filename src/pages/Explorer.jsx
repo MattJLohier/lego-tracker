@@ -8,8 +8,8 @@ import { useAuth } from '../hooks/useAuth'
 import { trackSearch, trackFilterApplied } from '../lib/analytics'
 
 const SORT_OPTIONS = [
-  { value: 'price_usd-asc', label: 'Price: Low → High' },
   { value: 'price_usd-desc', label: 'Price: High → Low' },
+  { value: 'price_usd-asc', label: 'Price: Low → High' },
   { value: 'rating-desc', label: 'Highest Rated' },
   { value: 'piece_count-desc', label: 'Most Pieces' },
   { value: 'price_per_piece-asc', label: 'Best Value ($/piece)' },

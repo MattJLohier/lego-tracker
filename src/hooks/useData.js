@@ -125,10 +125,13 @@ export function useProducts(filters = {}) {
     if (filters.isNew === true) query = query.eq('is_new', true)
     if (filters.availability && filters.availability !== 'all') query = query.eq('availability_status', filters.availability)
 
-    // Server-side sort
+    // Server-side sort — use enriched columns for reliable ordering
     const sortBy = filters.sortBy || 'product_name'
     const ascending = filters.sortDir === 'asc'
-    query = query.order(sortBy, { ascending })
+    
+    // price_usd is often null; enriched_price_usd is always populated
+    const effectiveSortCol = sortBy === 'price_usd' ? 'enriched_price_usd' : sortBy
+    query = query.order(effectiveSortCol, { ascending, nullsFirst: false })
 
     // Paginate
     query = query.range(from, to)
@@ -196,8 +199,15 @@ async function fetchProductsFallback(filters, setProducts, setTotal, setLoading)
     const key = filters.sortBy
     const dir = filters.sortDir === 'asc' ? 1 : -1
     result.sort((a, b) => {
-      const av = Number(a[key]) || 0
-      const bv = Number(b[key]) || 0
+      // Use enriched values for price to handle nulls
+      let av, bv
+      if (key === 'price_usd') {
+        av = Number(a.enriched_price_usd || a.price_usd) || 0
+        bv = Number(b.enriched_price_usd || b.price_usd) || 0
+      } else {
+        av = Number(a[key]) || 0
+        bv = Number(b[key]) || 0
+      }
       return (av - bv) * dir
     })
   }

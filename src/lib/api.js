@@ -224,6 +224,10 @@ export async function getThemeHealth() {
   return apiFetch('/api/theme-health')
 }
 
+export async function getWeeklyPublicReport() {
+  return apiFetch('/api/reports/weekly-public')
+}
+
 
 // ─── Email Stats ─────────────────────────────────────────────
 
