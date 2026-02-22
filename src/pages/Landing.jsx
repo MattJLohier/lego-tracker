@@ -30,7 +30,7 @@ function HeroSection({ onUpgrade }) {
   const { isPro } = useSubscription()
 
   return (
-    <section className="relative min-h-[90vh] flex items-center pt-16 overflow-hidden">
+    <section className="relative min-h-[min(90vh,800px)] flex items-center pt-20 pb-10 lg:pt-24 overflow-hidden">
       <div className="absolute inset-0">
         <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-lego-red/5 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '4s' }} />
         <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-lego-yellow/5 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '5s', animationDelay: '1s' }} />
@@ -47,18 +47,18 @@ function HeroSection({ onUpgrade }) {
 
       <div className="relative max-w-7xl mx-auto px-6 w-full">
         <div className="max-w-3xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs font-mono text-gray-400 mb-8 animate-fade-in">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs font-mono text-gray-400 mb-6 animate-fade-in">
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
             Live market coverage: {loading ? '...' : stats?.totalProducts?.toLocaleString()} sets tracked daily
           </div>
 
-          <h1 className="font-display font-extrabold text-5xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-tight mb-6 animate-slide-up">
+          <h1 className="font-display font-extrabold text-4xl sm:text-5xl lg:text-7xl leading-[0.95] tracking-tight mb-4 lg:mb-6 animate-slide-up">
             <span className="whitespace-nowrap">LEGO Market Intelligence</span>
             <br />
             <span className="text-gradient">Updated Daily</span>
           </h1>
 
-          <p className="text-lg text-gray-400 leading-relaxed max-w-xl mb-10 animate-slide-up stagger-2 opacity-0">
+          <p className="text-base lg:text-lg text-gray-400 leading-relaxed max-w-xl mb-8 animate-slide-up stagger-2 opacity-0">
             StudMetrics tracks price behavior, availability cycles, and discount patterns across the LEGO catalog — so you can time purchases and track what matters.
           </p>
 
@@ -85,7 +85,7 @@ function HeroSection({ onUpgrade }) {
             </Link>
           </div>
 
-          <div className="mt-10 flex flex-wrap items-center gap-2 text-[11px] text-gray-500 font-mono animate-slide-up stagger-4 opacity-0">
+          <div className="mt-8 lg:mt-10 flex flex-wrap items-center gap-2 text-[11px] text-gray-500 font-mono animate-slide-up stagger-4 opacity-0">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full glass">
               <Package size={12} className="text-lego-yellow" /> Full catalog coverage
             </span>
@@ -102,7 +102,7 @@ function HeroSection({ onUpgrade }) {
         </div>
 
         {!loading && stats && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mt-16 animate-slide-up stagger-5 opacity-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mt-10 lg:mt-16 animate-slide-up stagger-5 opacity-0">
             <StatMini label="Products" value={<AnimatedCounter end={stats.totalProducts} />} />
             <StatMini label="Themes" value={<AnimatedCounter end={stats.uniqueThemes} />} />
             <StatMini label="Avg Price" value={<AnimatedCounter end={stats.avgPrice} prefix="$" decimals={0} />} />
