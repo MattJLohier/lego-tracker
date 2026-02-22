@@ -270,7 +270,7 @@ function NewProductsSection() {
   if (loading || !products.length) return null
 
   return (
-    <section className="py-20 px-6">
+    <section className="py-15 px-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
