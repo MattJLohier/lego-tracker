@@ -280,7 +280,9 @@ export function SubscribeButton({ onClick, className = '' }) {
         text-black text-xs font-bold rounded-lg transition-all shadow-sm shadow-lego-yellow/20
         hover:shadow-lego-yellow/30 ${className}`}
     >
-      <Crown size={13} /> Go Pro
+      <Crown size={13} />
+      <span className="sm:hidden">Pro</span>
+      <span className="hidden sm:inline">Go Pro</span>
     </button>
   )
 }
