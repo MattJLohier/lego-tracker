@@ -32,7 +32,6 @@ const PRESETS = [
 const TABS = [
   { id: 'profiles', label: 'My Reports', icon: FileText },
   { id: 'history', label: 'History', icon: Clock },
-  { id: 'stats', label: 'Dashboard', icon: Activity },
 ]
 
 // Hour options for delivery time picker
@@ -152,7 +151,6 @@ export default function Reports() {
 
         {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onUpgrade={() => setShowUpgrade(true)} onPreview={handleProfilePreview} />}
         {tab === 'history' && <HistoryTab hook={hook} onViewReport={handleViewHistoryReport} />}
-        {tab === 'stats' && <StatsTab />}
         {tab === 'preview' && <ReportPreviewTab html={previewData} label={previewLabel} onClose={() => { setPreviewData(null); setTab('profiles') }} />}
       </div>
 
