@@ -8,29 +8,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-useEffect(() => {
-  async function load() {
-    setLoading(true)
-    try {
-      const { data, error: sbError } = await supabase
-        .from('weekly_market_report')
-        .select('*')
-        .order('week_start', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (sbError) {
-        setError(sbError.message)
-      } else {
-        setReport(data)
-      }
-    } catch (err) {
-      setError('Failed to load weekly report')
-    }
-    setLoading(false)
-  }
-  load()
-}, [])
+const PIPELINE_URL = import.meta.env.VITE_PIPELINE_URL || 'http://localhost:5111'
 
 function Delta({ value, suffix = '', invert = false, showZero = false }) {
   if (value === null || value === undefined) return <span className="text-gray-600 text-[10px]">—</span>
