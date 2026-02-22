@@ -1,6 +1,22 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, BarChart3, Search, Bell, TrendingDown, Sparkles, Package, Star, Zap, Heart, GitCompareArrows, LineChart, FileText, Crown, Check, X } from 'lucide-react'
+import {
+  ArrowRight,
+  BarChart3,
+  Search,
+  Bell,
+  TrendingDown,
+  Sparkles,
+  Package,
+  Star,
+  Zap,
+  Heart,
+  GitCompareArrows,
+  FileText,
+  Crown,
+  Check,
+  X,
+} from 'lucide-react'
 import AnimatedCounter from '../components/AnimatedCounter'
 import ProductCard from '../components/ProductCard'
 import { useStats, useNewProducts, useThemes } from '../hooks/useData'
@@ -32,8 +48,14 @@ function HeroSection({ onUpgrade }) {
   return (
     <section className="relative min-h-[min(90vh,800px)] flex items-center pt-20 pb-10 lg:pt-24 overflow-hidden">
       <div className="absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-lego-red/5 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '4s' }} />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-lego-yellow/5 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '5s', animationDelay: '1s' }} />
+        <div
+          className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-lego-red/5 rounded-full blur-[150px] animate-pulse"
+          style={{ animationDuration: '4s' }}
+        />
+        <div
+          className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-lego-yellow/5 rounded-full blur-[150px] animate-pulse"
+          style={{ animationDuration: '5s', animationDelay: '1s' }}
+        />
       </div>
 
       <div
@@ -49,40 +71,60 @@ function HeroSection({ onUpgrade }) {
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs font-mono text-gray-400 mb-6 animate-fade-in">
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-            Live market coverage: {loading ? '...' : stats?.totalProducts?.toLocaleString()} sets tracked daily
+            Live Coverage: {loading ? '...' : stats?.totalProducts?.toLocaleString()} sets tracked daily
           </div>
 
-          <h1 className="font-display font-extrabold text-4xl sm:text-5xl lg:text-7xl leading-[0.95] tracking-tight mb-4 lg:mb-6 animate-slide-up">
-            <span className="whitespace-nowrap">LEGO Market Intelligence</span>
+          {/* Headline: shorter on mobile, full on sm+ */}
+          <h1 className="font-display font-extrabold text-[34px] sm:text-5xl lg:text-7xl leading-[0.95] tracking-tight mb-4 lg:mb-6 animate-slide-up">
+            <span className="sm:hidden">LEGO Market Intel</span>
+            <span className="hidden sm:inline">LEGO Market Intelligence</span>
             <br />
             <span className="text-gradient">Updated Daily</span>
           </h1>
 
           <p className="text-base lg:text-lg text-gray-400 leading-relaxed max-w-xl mb-8 animate-slide-up stagger-2 opacity-0">
-            StudMetrics tracks price behavior, availability cycles, and discount patterns across the LEGO catalog — so you can time purchases and track what matters.
+            StudMetrics tracks price behavior, availability cycles, and discount patterns across the LEGO catalog — so you can time
+            purchases and track what matters.
           </p>
 
-          <div className="flex flex-wrap gap-4 animate-slide-up stagger-3 opacity-0">
-            <Link
-              to="/explore"
-              className="inline-flex items-center gap-2 px-6 py-3.5 bg-lego-red hover:bg-red-700 text-white font-display font-semibold rounded-xl transition-all hover:scale-105 hover:shadow-lg hover:shadow-lego-red/20"
-            >
-              Explore the Market <ArrowRight size={18} />
-            </Link>
+          {/* CTAs: Option A
+              - Mobile: stacked full-width (primary, secondary)
+              - Tertiary: text link (no button wrap)
+              - sm+: row buttons like before
+          */}
+          <div className="animate-slide-up stagger-3 opacity-0">
+            <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:gap-4">
+              <Link
+                to="/explore"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 bg-lego-red hover:bg-red-700 text-white font-display font-semibold rounded-xl transition-all hover:shadow-lg hover:shadow-lego-red/20"
+              >
+                Explore Market <ArrowRight size={18} />
+              </Link>
 
-            <Link
-              to="/market-report"
-              className="inline-flex items-center gap-2 px-6 py-3.5 glass glass-hover text-white font-display font-semibold rounded-xl transition-all"
-            >
-              <FileText size={18} /> Weekly Report
-            </Link>
+              <Link
+                to="/market-report"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 sm:px-6 py-3 sm:py-3.5 glass glass-hover text-white font-display font-semibold rounded-xl transition-all"
+              >
+                <FileText size={18} /> Weekly Report
+              </Link>
 
-            <Link
-              to="/alerts"
-              className="inline-flex items-center gap-2 px-6 py-3.5 glass glass-hover text-white/90 font-display font-semibold rounded-xl transition-all"
-            >
-              <Bell size={18} /> Set an Alert
-            </Link>
+              {/* Tertiary as text link on mobile to prevent stacking/wrap ugliness */}
+              <Link
+                to="/alerts"
+                className="sm:hidden inline-flex items-center justify-center gap-2 text-sm font-medium text-lego-yellow hover:text-lego-yellow/90"
+              >
+                <Bell size={16} />
+                Set an Alert
+              </Link>
+
+              {/* Keep the original button style on sm+ */}
+              <Link
+                to="/alerts"
+                className="hidden sm:inline-flex items-center gap-2 px-6 py-3.5 glass glass-hover text-white/90 font-display font-semibold rounded-xl transition-all"
+              >
+                <Bell size={18} /> Set an Alert
+              </Link>
+            </div>
           </div>
 
           <div className="mt-8 lg:mt-10 flex flex-wrap items-center gap-2 text-[11px] text-gray-500 font-mono animate-slide-up stagger-4 opacity-0">
@@ -206,13 +248,11 @@ function FeaturesSection() {
           ))}
         </div>
 
-        {/* Pro comparison table */}
         <div className="mt-16 max-w-2xl mx-auto">
           <h3 className="font-display font-bold text-xl text-center mb-6 tracking-tight">
             Free vs <span className="text-lego-yellow">Pro</span>
           </h3>
           <div className="glass rounded-2xl overflow-hidden">
-            {/* Table header */}
             <div className="grid grid-cols-[1fr_80px_80px] sm:grid-cols-[1fr_100px_100px] items-center px-5 py-3 border-b border-white/5 bg-white/[0.02]">
               <span className="text-[11px] font-mono text-gray-500 uppercase tracking-wider">Feature</span>
               <span className="text-[11px] font-mono text-gray-500 uppercase tracking-wider text-center">Free</span>
@@ -222,7 +262,6 @@ function FeaturesSection() {
                 </span>
               </span>
             </div>
-            {/* Table rows */}
             {comparisonRows.map((row, i) => (
               <div
                 key={row.feature}
@@ -256,9 +295,7 @@ function FeaturesSection() {
               </div>
             ))}
           </div>
-          <p className="text-center text-[11px] text-gray-600 font-mono mt-4">
-            Designed for collectors • deal optimizers • retirement watchers
-          </p>
+          <p className="text-center text-[11px] text-gray-600 font-mono mt-4">Designed for collectors • deal optimizers • retirement watchers</p>
         </div>
       </div>
     </section>
@@ -306,9 +343,7 @@ function ThemePreviewSection() {
           <h2 className="font-display font-bold text-3xl tracking-tight mb-3">
             Market by <span className="text-gradient">Theme</span>
           </h2>
-          <p className="text-gray-400 max-w-lg mx-auto text-sm">
-            See which themes are expensive, discounted, trending, or newly stocked.
-          </p>
+          <p className="text-gray-400 max-w-lg mx-auto text-sm">See which themes are expensive, discounted, trending, or newly stocked.</p>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -407,11 +442,11 @@ function Footer() {
           <span className="font-display font-semibold text-sm">StudMetrics</span>
         </div>
 
-        <p className="text-[10px] text-gray-600">
-          LEGO® is a trademark of the LEGO Group. StudMetrics is not affiliated with or endorsed by the LEGO Group.
-        </p>
+        <p className="text-[10px] text-gray-600">LEGO® is a trademark of the LEGO Group. StudMetrics is not affiliated with or endorsed by the LEGO Group.</p>
         <div className="flex items-center gap-4">
-          <Link to="/market-report" className="text-[10px] text-gray-500 hover:text-lego-yellow transition-colors font-medium">Weekly Market Report</Link>
+          <Link to="/market-report" className="text-[10px] text-gray-500 hover:text-lego-yellow transition-colors font-medium">
+            Weekly Market Report
+          </Link>
           <p className="text-[10px] text-gray-600 font-mono">Data refreshed daily</p>
         </div>
       </div>
