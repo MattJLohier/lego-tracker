@@ -59,16 +59,14 @@ export default function Navbar() {
                   </Link>
                 ))}
 
-                {user && (
-                  <Link
-                    to="/watchlist"
-                    className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all
-                      ${pathname === '/watchlist' ? 'bg-lego-red/10 text-lego-red' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-                  >
-                    <Heart size={14} />
-                    <span className="hidden md:inline">Watchlist</span>
-                  </Link>
-                )}
+                <Link
+                  to="/watchlist"
+                  className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                    ${pathname === '/watchlist' ? 'bg-lego-red/10 text-lego-red' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                >
+                  <Heart size={14} />
+                  <span className="hidden md:inline">Watchlist</span>
+                </Link>
               </div>
             </div>
           </div>
