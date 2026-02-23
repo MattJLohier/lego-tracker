@@ -423,7 +423,7 @@ export function useAllSnapshots() {
           .order('product_code', { ascending: true })
           .order('scraped_date', { ascending: true })
           .range(from, from + pageSize - 1)
-
+        
         if (error || !data || data.length === 0) {
           keepGoing = false
         } else {

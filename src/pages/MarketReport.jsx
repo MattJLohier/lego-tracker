@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  BarChart3, TrendingDown, TrendingUp, Sparkles, ShoppingBag, Tag,
+  BarChart3, Newspaper, TrendingDown, TrendingUp, Sparkles, ShoppingBag, Tag,
   AlertTriangle, ArrowRight, Calendar, Crown, FileText, Zap, Package,
   AlertCircle, ChevronDown, ChevronUp, Flame, Eye, EyeOff, Star,
   ArrowDown, ArrowUp, Minus, Bot, Clock, ExternalLink
@@ -118,6 +118,9 @@ export default function MarketReport() {
 
         {/* ── 3 Takes (AI Narrative) ── */}
         {report.three_takes && <ThreeTakes takes={report.three_takes} />}
+
+        {/* ── News ── */}
+        <NewsSection articles={report.news_articles} />
 
         {/* ── New This Week ── */}
         <NewSetsSection sets={report.new_sets} />
@@ -297,6 +300,57 @@ function ThreeTakes({ takes }) {
   )
 }
 
+function NewsSection({ articles }) {
+  if (!articles || articles.length === 0) return null
+  return (
+    <div className="mb-8">
+      <SectionHeader
+        icon={<Newspaper size={18} className="text-lego-blue" />}
+        title="In the News"
+        subtitle="AI-curated LEGO stories that matter this week"
+        count={articles.length}
+      />
+      <div className="space-y-2.5">
+        {articles.map((article, i) => (
+          <a
+            key={article.url || i}
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block glass rounded-xl p-4 glass-hover transition-all group"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-white group-hover:text-lego-yellow transition-colors leading-snug">
+                  {article.title}
+                </h3>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-[10px] font-mono text-lego-blue font-medium">{article.source}</span>
+                  {article.published && (
+                    <>
+                      <span className="text-gray-700">·</span>
+                      <span className="text-[10px] font-mono text-gray-500">
+                        {new Date(article.published + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {article.why_it_matters && (
+                  <p className="text-[11px] text-gray-400 mt-2 leading-relaxed flex items-start gap-1.5">
+                    <Bot size={11} className="text-lego-yellow/60 mt-0.5 shrink-0" />
+                    <span>{article.why_it_matters}</span>
+                  </p>
+                )}
+              </div>
+              <ExternalLink size={14} className="text-gray-600 group-hover:text-lego-yellow shrink-0 mt-1 transition-colors" />
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function NewSetsSection({ sets }) {
   const [expanded, setExpanded] = useState(false)
   if (!sets || sets.length === 0) return null
@@ -433,8 +487,39 @@ function NewDealsSection({ deals }) {
   )
 }
 
+
+
+function formatAvailabilityStatus(status) {
+  const map = {
+    'E_AVAILABLE': 'In Stock',
+    'G_BACKORDER': 'Backorder',
+    'F_BACKORDER_FOR_DATE': 'Backorder (Dated)',
+    'K_SOLD_OUT': 'Sold Out',
+    'H_OUT_OF_STOCK': 'Out of Stock',
+    'R_RETIRED': 'Retired',
+    'B_COMING_SOON_AT_DATE': 'Coming Soon',
+    'A_PRE_ORDER_FOR_DATE': 'Pre-Order',
+  }
+  return map[status] || status || 'Unknown'
+}
+
+function statusColor(status) {
+  const map = {
+    'E_AVAILABLE': 'text-lego-green',
+    'G_BACKORDER': 'text-orange-400',
+    'F_BACKORDER_FOR_DATE': 'text-orange-400',
+    'K_SOLD_OUT': 'text-red-400',
+    'H_OUT_OF_STOCK': 'text-red-400',
+    'R_RETIRED': 'text-gray-400',
+    'B_COMING_SOON_AT_DATE': 'text-blue-400',
+    'A_PRE_ORDER_FOR_DATE': 'text-purple-400',
+  }
+  return map[status] || 'text-gray-500'
+}
+
+
 function GoneScarceSection({ items, premiumOosPct, premiumOosDelta }) {
-  // Filter to $100+ sets, sorted by MSRP descending (already sorted from backend, but ensure)
+  // Filter to $100+ sets, sorted by MSRP descending
   const premiumItems = (items || [])
     .filter(item => Number(item.price_usd || 0) >= 100)
     .sort((a, b) => Number(b.price_usd || 0) - Number(a.price_usd || 0))
@@ -452,7 +537,7 @@ function GoneScarceSection({ items, premiumOosPct, premiumOosDelta }) {
         count={hasItems ? premiumItems.length : undefined}
       />
 
-      {/* Premium OOS stat card — always show if data exists */}
+      {/* Premium OOS stat card */}
       <div className="glass rounded-lg px-4 py-3 mb-3 flex flex-wrap items-center gap-4">
         {premiumOosPct !== null && premiumOosPct !== undefined && (
           <div className="flex items-center gap-2">
@@ -484,8 +569,7 @@ function GoneScarceSection({ items, premiumOosPct, premiumOosDelta }) {
                   <th className="py-2.5 px-3 text-[10px] font-mono text-gray-500 uppercase text-left">Set</th>
                   <th className="py-2.5 px-3 text-[10px] font-mono text-gray-500 uppercase text-left">Theme</th>
                   <th className="py-2.5 px-3 text-[10px] font-mono text-gray-500 uppercase text-right">MSRP</th>
-                  <th className="py-2.5 px-3 text-[10px] font-mono text-gray-500 uppercase text-right">Pieces</th>
-                  <th className="py-2.5 px-3 text-[10px] font-mono text-gray-500 uppercase text-right">Rating</th>
+                  <th className="py-2.5 px-3 text-[10px] font-mono text-gray-500 uppercase text-left">Status</th>
                   <th className="py-2.5 px-3 text-[10px] font-mono text-gray-500 uppercase text-center">Tier</th>
                 </tr>
               </thead>
@@ -494,6 +578,14 @@ function GoneScarceSection({ items, premiumOosPct, premiumOosDelta }) {
                   const price = Number(item.price_usd || 0)
                   const tier = price >= 400 ? '$400+' : price >= 200 ? '$200+' : '$100+'
                   const tierColor = price >= 400 ? 'text-red-400 bg-red-400/10' : price >= 200 ? 'text-orange-400 bg-orange-400/10' : 'text-yellow-400 bg-yellow-400/10'
+                  const prevLabel = formatAvailabilityStatus(item.prev_status)
+                  const currLabel = formatAvailabilityStatus(item.availability_status)
+                  const prevColor = statusColor(item.prev_status)
+                  const currColor = statusColor(item.availability_status)
+                  const transDate = item.transition_date
+                    ? new Date(item.transition_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : null
+
                   return (
                     <tr key={item.product_code || i} className="border-b border-lego-border/30 hover:bg-white/[0.03] transition-colors">
                       <td className="py-2.5 px-3 font-mono text-gray-600">{i + 1}</td>
@@ -505,14 +597,15 @@ function GoneScarceSection({ items, premiumOosPct, premiumOosDelta }) {
                       </td>
                       <td className="py-2.5 px-3 text-gray-400">{item.theme}</td>
                       <td className="py-2.5 px-3 text-right font-mono text-lego-yellow font-bold">${price.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-gray-400">{item.piece_count || '—'}</td>
-                      <td className="py-2.5 px-3 text-right font-mono text-gray-400">
-                        {item.rating ? (
-                          <span className="inline-flex items-center gap-0.5">
-                            <Star size={9} className="text-lego-yellow fill-lego-yellow" />
-                            {Number(item.rating).toFixed(1)}
-                          </span>
-                        ) : '—'}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-mono font-medium ${prevColor}`}>{prevLabel}</span>
+                          <ArrowRight size={10} className="text-gray-600 shrink-0" />
+                          <span className={`text-[10px] font-mono font-semibold ${currColor}`}>{currLabel}</span>
+                        </div>
+                        {transDate && (
+                          <div className="text-[9px] text-gray-600 font-mono mt-0.5">{transDate}</div>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         <span className={`text-[9px] font-mono font-semibold px-2 py-0.5 rounded ${tierColor}`}>{tier}</span>
@@ -525,7 +618,6 @@ function GoneScarceSection({ items, premiumOosPct, premiumOosDelta }) {
           </div>
         </div>
       ) : (
-        /* Empty state — compelling, not boring */
         <div className="glass rounded-xl p-6 text-center border border-dashed border-orange-400/20">
           <AlertTriangle size={28} className="text-orange-400/40 mx-auto mb-3" />
           <p className="font-display font-semibold text-sm text-gray-300 mb-1">

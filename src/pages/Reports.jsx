@@ -4,7 +4,7 @@ import {
   FileText, Plus, Trash2, Mail, Clock, Send, Zap, TrendingDown,
   ShoppingBag, Sparkles, AlertTriangle, Tag, BarChart3, X, Check,
   Power, RefreshCw, Calendar, Activity, Filter, Crown, Eye, ChevronDown,
-  ChevronUp, Settings, Bell
+  ChevronUp, Settings, Bell, CheckCircle, AlertCircle, Loader2
 } from 'lucide-react'
 import { useReportProfiles } from '../hooks/usePipeline'
 import { useAuth } from '../hooks/useAuth'
@@ -21,6 +21,7 @@ const SECTIONS = [
   { key: 'on_sale', label: 'Current Sales', icon: Tag, color: 'text-lego-yellow', dbKey: 'include_new_deals' },
   { key: 'retiring', label: 'Retirement Risk', icon: AlertTriangle, color: 'text-red-400', dbKey: 'include_retirement_risk' },
   { key: 'market_stats', label: 'Market Stats', icon: BarChart3, color: 'text-purple-400', dbKey: 'include_market_stats' },
+  { key: 'news', label: 'LEGO News', icon: FileText, color: 'text-blue-300', dbKey: 'include_news' },
 ]
 
 const PRESETS = [
@@ -65,8 +66,35 @@ function getSectionsFromProfile(prof) {
   if (prof.include_new_deals) result.push('on_sale')
   if (prof.include_retirement_risk) result.push('retiring')
   if (prof.include_market_stats) result.push('market_stats')
+  if (prof.include_news) result.push('news')
   return result
 }
+
+
+/* ─── Toast Notification ───────────────────────── */
+
+function Toast({ message, type = 'success', onDismiss }) {
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, 4000)
+    return () => clearTimeout(timer)
+  }, [onDismiss])
+
+  return (
+    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border backdrop-blur-sm animate-slide-up ${
+      type === 'success' ? 'bg-green-500/15 border-green-500/30 text-green-400' :
+      type === 'error' ? 'bg-red-500/15 border-red-500/30 text-red-400' :
+      type === 'warning' ? 'bg-orange-500/15 border-orange-500/30 text-orange-400' :
+      'bg-lego-yellow/15 border-lego-yellow/30 text-lego-yellow'
+    }`}>
+      {type === 'success' && <CheckCircle size={16} />}
+      {type === 'error' && <AlertCircle size={16} />}
+      {type === 'warning' && <Clock size={16} />}
+      <span className="text-xs font-semibold">{message}</span>
+      <button onClick={onDismiss} className="ml-1 opacity-60 hover:opacity-100"><X size={12} /></button>
+    </div>
+  )
+}
+
 
 export default function Reports() {
   const { user } = useAuth()
@@ -75,6 +103,7 @@ export default function Reports() {
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [previewData, setPreviewData] = useState(null)
   const [previewLabel, setPreviewLabel] = useState('')
+  const [toast, setToast] = useState(null)
 
   // Preview a specific profile — uses profile ID so backend applies settings
   const handleProfilePreview = async (profileId, profileName) => {
@@ -149,12 +178,24 @@ export default function Reports() {
           ))}
         </div>
 
-        {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onUpgrade={() => setShowUpgrade(true)} onPreview={handleProfilePreview} />}
+        {tab === 'profiles' && <ProfilesTab user={user} hook={hook} onUpgrade={() => setShowUpgrade(true)} onPreview={handleProfilePreview} onToast={setToast} />}
         {tab === 'history' && <HistoryTab hook={hook} onViewReport={handleViewHistoryReport} />}
         {tab === 'preview' && <ReportPreviewTab html={previewData} label={previewLabel} onClose={() => { setPreviewData(null); setTab('profiles') }} />}
       </div>
 
       <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} feature="More reports" />
+
+      {/* Global toast */}
+      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+
+      {/* Slide-up animation for toast */}
+      <style>{`
+        @keyframes slide-up {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-up { animation: slide-up 0.25s ease-out; }
+      `}</style>
     </main>
   )
 }
@@ -162,12 +203,14 @@ export default function Reports() {
 
 /* ─── Profiles Tab ─────────────────────────────── */
 
-function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
+function ProfilesTab({ user, hook, onUpgrade, onPreview, onToast }) {
   const { profiles, loading, createProfile, deleteProfile, generateReport } = hook
   const sub = useSubscription()
   const [showForm, setShowForm] = useState(false)
   const [confirmDel, setConfirmDel] = useState(null)
-  const [sendState, setSendState] = useState({}) // { [id]: 'sending' | 'done' | 'cooldown' }
+  const [deleting, setDeleting] = useState(null)
+  // States: null | 'sending' | 'done' | 'error' | 'cooldown'
+  const [sendState, setSendState] = useState({})
   const [expandedCard, setExpandedCard] = useState(null)
   const themes = useThemeList()
 
@@ -190,8 +233,7 @@ function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
     setShowForm(!showForm)
   }
 
-  const handleSend = async (id) => {
-    // Check cooldown — prevent spam
+  const handleSend = async (id, name) => {
     const state = sendState[id]
     if (state === 'sending' || state === 'cooldown') return
 
@@ -200,14 +242,33 @@ function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
       const result = await api.generateReport(id, true)
       if (result?.error?.includes('rate limit') || result?.error?.includes('cooldown')) {
         setSendState(prev => ({ ...prev, [id]: 'cooldown' }))
-        setTimeout(() => setSendState(prev => ({ ...prev, [id]: null })), 5000)
+        onToast?.({ message: 'Rate limited — please wait before sending again', type: 'warning' })
+        setTimeout(() => setSendState(prev => ({ ...prev, [id]: null })), 8000)
         return
       }
       setSendState(prev => ({ ...prev, [id]: 'done' }))
-      hook.refresh()
-      setTimeout(() => setSendState(prev => ({ ...prev, [id]: null })), 3000)
+      onToast?.({ message: `"${name}" sent to your email!`, type: 'success' })
+      // Delay refresh so the "done" state is visible for a moment
+      setTimeout(() => {
+        hook.refresh()
+      }, 1500)
+      setTimeout(() => setSendState(prev => ({ ...prev, [id]: null })), 4000)
     } catch {
-      setSendState(prev => ({ ...prev, [id]: null }))
+      setSendState(prev => ({ ...prev, [id]: 'error' }))
+      onToast?.({ message: 'Failed to send report. Please try again.', type: 'error' })
+      setTimeout(() => setSendState(prev => ({ ...prev, [id]: null })), 3000)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    setDeleting(id)
+    try {
+      await deleteProfile(id)
+      sub.refresh()
+      onToast?.({ message: 'Report deleted', type: 'success' })
+    } finally {
+      setDeleting(null)
+      setConfirmDel(null)
     }
   }
 
@@ -242,7 +303,12 @@ function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
           email={user.email}
           isPro={sub.isPro}
           onUpgrade={onUpgrade}
-          onCreate={async (p) => { await createProfile(p); setShowForm(false); sub.refresh() }}
+          onCreate={async (p) => {
+            await createProfile(p)
+            setShowForm(false)
+            sub.refresh()
+            onToast?.({ message: `"${p.name}" created!`, type: 'success' })
+          }}
           onCancel={() => setShowForm(false)}
         />
       )}
@@ -261,6 +327,7 @@ function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
                   onClick={async () => {
                     if (locked) { onUpgrade(); return }
                     await createProfile({ ...p, email: user.email, active: true }); sub.refresh()
+                    onToast?.({ message: `"${p.name}" created from template!`, type: 'success' })
                   }}
                   className="glass rounded-xl p-4 text-left hover:bg-white/[0.03] transition-colors group border border-transparent hover:border-lego-yellow/20 relative"
                 >
@@ -297,9 +364,45 @@ function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
         const themeFilter = prof.themes?.[0] || prof.theme_filter || null
         const state = sendState[prof.id]
         const lastSent = prof.last_sent_at || prof.last_generated_at
+        const isDeleting = deleting === prof.id
 
         return (
-          <div key={prof.id} className={`glass rounded-xl transition-colors ${prof.enabled !== false && prof.active !== false ? 'hover:bg-white/[0.02]' : 'opacity-60'}`}>
+          <div key={prof.id} className={`glass rounded-xl transition-all duration-300 ${
+            isDeleting ? 'opacity-40 scale-[0.98]' :
+            prof.enabled !== false && prof.active !== false ? 'hover:bg-white/[0.02]' : 'opacity-60'
+          }`}>
+            {/* Sending banner overlay */}
+            {(state === 'sending' || state === 'done' || state === 'error') && (
+              <div className={`px-4 py-2 flex items-center gap-2 border-b transition-all duration-300 ${
+                state === 'sending' ? 'bg-lego-yellow/5 border-lego-yellow/20' :
+                state === 'done' ? 'bg-green-500/5 border-green-500/20' :
+                'bg-red-500/5 border-red-500/20'
+              }`}>
+                {state === 'sending' && (
+                  <>
+                    <span className="block animate-spin w-3.5 h-3.5 border-2 border-lego-yellow/30 border-t-lego-yellow rounded-full" />
+                    <span className="text-[11px] font-semibold text-lego-yellow">Generating & sending report…</span>
+                    <span className="text-[10px] text-gray-600 ml-auto">This may take a moment</span>
+                  </>
+                )}
+                {state === 'done' && (
+                  <>
+                    <div className="flex items-center justify-center w-4 h-4 bg-green-500/20 rounded-full">
+                      <Check size={10} className="text-green-400" />
+                    </div>
+                    <span className="text-[11px] font-semibold text-green-400">Report sent to your email!</span>
+                    <CheckCircle size={12} className="text-green-500/40 ml-auto" />
+                  </>
+                )}
+                {state === 'error' && (
+                  <>
+                    <AlertCircle size={14} className="text-red-400" />
+                    <span className="text-[11px] font-semibold text-red-400">Failed to send — please try again</span>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Main card row */}
             <div className="p-4">
               <div className="flex items-start gap-3">
@@ -364,27 +467,39 @@ function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
                   >
                     <Eye size={13} />
                   </button>
+
+                  {/* Send button with clear states */}
                   <button
-                    onClick={() => handleSend(prof.id)}
+                    onClick={() => handleSend(prof.id, prof.name)}
                     disabled={state === 'sending' || state === 'cooldown'}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      state === 'cooldown' ? 'text-orange-400 cursor-not-allowed' :
-                      state === 'done' ? 'text-green-400' :
-                      state === 'sending' ? 'text-gray-600' :
-                      'text-gray-600 hover:text-lego-green'
+                    className={`relative p-1.5 rounded-lg transition-all duration-300 ${
+                      state === 'sending' ? 'text-lego-yellow cursor-wait' :
+                      state === 'done' ? 'text-green-400 bg-green-500/10' :
+                      state === 'error' ? 'text-red-400 bg-red-500/10' :
+                      state === 'cooldown' ? 'text-orange-400 cursor-not-allowed opacity-50' :
+                      'text-gray-600 hover:text-lego-green hover:bg-lego-green/5'
                     }`}
-                    title={state === 'cooldown' ? 'Rate limited — try again later' : 'Send Now'}
+                    title={
+                      state === 'sending' ? 'Sending…' :
+                      state === 'done' ? 'Sent!' :
+                      state === 'error' ? 'Send failed' :
+                      state === 'cooldown' ? 'Rate limited — try again later' :
+                      'Send Now'
+                    }
                   >
                     {state === 'sending' ? (
-                      <span className="block animate-spin w-3.5 h-3.5 border-2 border-gray-600/30 border-t-lego-green rounded-full" />
+                      <span className="block animate-spin w-3.5 h-3.5 border-2 border-lego-yellow/30 border-t-lego-yellow rounded-full" />
                     ) : state === 'done' ? (
-                      <Check size={13} />
+                      <Check size={13} className="animate-scale-in" />
+                    ) : state === 'error' ? (
+                      <AlertCircle size={13} />
                     ) : state === 'cooldown' ? (
                       <Clock size={13} />
                     ) : (
                       <Send size={13} />
                     )}
                   </button>
+
                   <button
                     onClick={() => setExpandedCard(isExpanded ? null : prof.id)}
                     className="p-1.5 text-gray-600 hover:text-gray-300 rounded-lg transition-colors"
@@ -393,10 +508,17 @@ function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
                     {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                   </button>
                   {confirmDel === prof.id ? (
-                    <>
-                      <button onClick={async () => { await deleteProfile(prof.id); setConfirmDel(null); sub.refresh() }} className="px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md">Del</button>
-                      <button onClick={() => setConfirmDel(null)} className="px-2 py-1 glass text-gray-400 text-[10px] rounded-md">No</button>
-                    </>
+                    <div className="flex items-center gap-1 ml-1">
+                      <button
+                        onClick={() => handleDelete(prof.id)}
+                        disabled={isDeleting}
+                        className="flex items-center gap-1 px-2 py-1 bg-red-600 text-white text-[10px] font-semibold rounded-md disabled:opacity-50"
+                      >
+                        {isDeleting ? <span className="animate-spin w-2.5 h-2.5 border-2 border-white/30 border-t-white rounded-full" /> : null}
+                        {isDeleting ? 'Deleting…' : 'Delete'}
+                      </button>
+                      <button onClick={() => setConfirmDel(null)} disabled={isDeleting} className="px-2 py-1 glass text-gray-400 text-[10px] rounded-md disabled:opacity-50">No</button>
+                    </div>
                   ) : (
                     <button onClick={() => setConfirmDel(prof.id)} className="p-1.5 text-gray-600 hover:text-red-400 rounded-lg transition-colors"><Trash2 size={13} /></button>
                   )}
@@ -439,6 +561,16 @@ function ProfilesTab({ user, hook, onUpgrade, onPreview }) {
           </div>
         )
       })}
+
+      {/* Scale-in animation for checkmark */}
+      <style>{`
+        @keyframes scale-in {
+          from { opacity: 0; transform: scale(0.3); }
+          50% { transform: scale(1.2); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-scale-in { animation: scale-in 0.35s ease-out; }
+      `}</style>
     </div>
   )
 }
@@ -580,11 +712,20 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
       <div className="flex items-center justify-between pt-3 border-t border-lego-border/50">
         <p className="text-[10px] text-gray-500">Reports generated and emailed at {formatDeliveryTime(deliveryHour)} UTC {freq}.</p>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white">Cancel</button>
+          <button onClick={onCancel} disabled={submitting} className="px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white disabled:opacity-50">Cancel</button>
           <button onClick={handleCreate} disabled={!name || !email || sections.length === 0 || submitting}
-            className="flex items-center gap-1.5 px-4 py-2 bg-lego-yellow hover:bg-yellow-600 text-black text-xs font-semibold rounded-lg disabled:opacity-50">
-            {submitting ? <span className="animate-spin w-3 h-3 border-2 border-black/30 border-t-black rounded-full" /> : <FileText size={14} />}
-            Create Report
+            className="flex items-center gap-1.5 px-4 py-2 bg-lego-yellow hover:bg-yellow-600 text-black text-xs font-semibold rounded-lg disabled:opacity-50 transition-all">
+            {submitting ? (
+              <>
+                <span className="animate-spin w-3 h-3 border-2 border-black/30 border-t-black rounded-full" />
+                Creating…
+              </>
+            ) : (
+              <>
+                <FileText size={14} />
+                Create Report
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -598,6 +739,14 @@ function NewReportForm({ themes, email: defaultEmail, onCreate, onCancel, isPro,
 function HistoryTab({ hook, onViewReport }) {
   const { history, loading } = hook
   const [filterStatus, setFilterStatus] = useState('all')
+  const [refreshing, setRefreshing] = useState(false)
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await hook.refresh()
+    // Minimum visible spinner time
+    setTimeout(() => setRefreshing(false), 600)
+  }
 
   if (loading) return <LoadingSkeleton />
 
@@ -637,9 +786,10 @@ function HistoryTab({ hook, onViewReport }) {
             </button>
           ))}
         </div>
-        <button onClick={() => hook.refresh()}
-          className="flex items-center gap-1 px-2.5 py-1 glass text-gray-500 hover:text-white text-[10px] font-semibold rounded-lg transition-colors">
-          <RefreshCw size={10} /> Refresh
+        <button onClick={handleRefresh} disabled={refreshing}
+          className="flex items-center gap-1 px-2.5 py-1 glass text-gray-500 hover:text-white text-[10px] font-semibold rounded-lg transition-colors disabled:opacity-50">
+          <RefreshCw size={10} className={refreshing ? 'animate-spin' : ''} />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
 
@@ -841,8 +991,18 @@ function LoadingSkeleton() {
     <div className="space-y-4">
       {[1, 2, 3].map(i => (
         <div key={i} className="glass rounded-xl p-5 animate-pulse">
-          <div className="h-4 bg-lego-surface2 rounded w-48 mb-2" />
-          <div className="h-3 bg-lego-surface2 rounded w-32" />
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-lego-surface2 rounded-lg" />
+            <div className="flex-1">
+              <div className="h-4 bg-lego-surface2 rounded w-48 mb-2" />
+              <div className="h-3 bg-lego-surface2 rounded w-32 mb-2" />
+              <div className="flex gap-2">
+                <div className="h-3 bg-lego-surface2 rounded w-16" />
+                <div className="h-3 bg-lego-surface2 rounded w-20" />
+                <div className="h-3 bg-lego-surface2 rounded w-12" />
+              </div>
+            </div>
+          </div>
         </div>
       ))}
     </div>

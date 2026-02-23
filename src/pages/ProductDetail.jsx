@@ -103,7 +103,7 @@ export default function ProductDetail() {
 
   const storeUrl = legoStoreUrl(product)
 
-  const hasDiscount = discount_usd && Number(discount_usd) > 0
+  const hasDiscount = Number(discount_usd) > 0
   const firstSeen = history.length > 0 ? history[0].scraped_date : scraped_date
   const daysTracked = history.length > 1
     ? Math.round((new Date(history[history.length - 1].scraped_date) - new Date(history[0].scraped_date)) / 86400000)
