@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
     supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/watchlist`,
+        redirectTo: `${window.location.origin}/analytics`,
       },
     })
 
