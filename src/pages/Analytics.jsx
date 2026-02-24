@@ -10,7 +10,7 @@ import {
   LineChart, Line, AreaChart, Area, CartesianGrid, Legend as RLegend
 } from 'recharts'
 import AnimatedCounter from '../components/AnimatedCounter'
-import { useStats, useThemes, useBestValue, useNewProducts, useAllSnapshots, useMostExpensiveSets, useAlerts } from '../hooks/useData'
+import { useStats, useThemes, useBestValue, useNewProducts, useAllSnapshots, useMarketTimeSeries, useMostExpensiveSets, useAlerts } from '../hooks/useData'
 import { useSavedDashboards } from '../hooks/useSavedDashboards'
 import { useAuth } from '../hooks/useAuth'
 import { useSubscription } from '../hooks/useSubscription'
@@ -38,6 +38,7 @@ export default function Analytics() {
   const { products: bestValue, loading: bL } = useBestValue(15)
   const { products: newProducts, loading: nL } = useNewProducts(10)
   const { snapshots, loading: snapL } = useAllSnapshots()
+  const { data: marketTimeSeries, loading: mtsL } = useMarketTimeSeries()
   const { products: expensiveSets, loading: eL } = useMostExpensiveSets(25)
   const { alerts: marketAlerts, loading: maL } = useAlerts()
   const savedDashboardsHook = useSavedDashboards()
@@ -95,7 +96,7 @@ export default function Analytics() {
           marketAlerts ? <MarketSalesTab sales={marketAlerts.newSales} /> : maL ? <LoadingSkeleton /> : null
         )}
         {activeTab === 'timeseries' && (
-          <TimeSeriesTab snapshots={snapshots} loading={snapL} />
+          <TimeSeriesTab snapshots={snapshots} loading={snapL || mtsL} marketTimeSeries={marketTimeSeries} />
         )}
         {activeTab === 'custom' && (
           <ProGate isPro={isPro || !!user} isLoggedIn={!!user} feature="Custom Analytics Builder" onUpgradeClick={() => setShowUpgrade(true)}>
@@ -164,7 +165,7 @@ function OverviewTab({ stats, sL, themes, tL, bestValue, bL, newProducts, nL, ex
 
 /* ========================= TIME SERIES TAB ========================= */
 
-function TimeSeriesTab({ snapshots, loading }) {
+function TimeSeriesTab({ snapshots, loading, marketTimeSeries = [] }) {
   if (loading) return <LoadingSkeleton />
 
   const dates = [...new Set(snapshots.map(s => s.scraped_date))].sort()
@@ -235,20 +236,8 @@ function TimeSeriesTab({ snapshots, loading }) {
       obj[label] = (obj[label] || 0) + 1
     }
     const statuses = [...allCategories].sort()
-    // Build a color map for the normalized statuses
     const statusColorMap = {}
     for (const s of allCategories) {
-      const match = Object.values({
-        'In Stock': '#34d399',
-        'Pre-Order': '#fbbf24',
-        'Backorder': '#f97316',
-        'Temporarily Unavailable': '#f97316',
-        'Out of Stock': '#f87171',
-        'Retiring Soon': '#fb923c',
-        'Discontinued': '#ef4444',
-        'Unknown': '#6b7280',
-      })
-      // Map label to color
       statusColorMap[s] = {
         'In Stock': '#34d399',
         'Pre-Order': '#fbbf24',
@@ -284,46 +273,16 @@ function TimeSeriesTab({ snapshots, loading }) {
     }))
   }, [snapshots])
 
-  // ─── Market-level KPI Time Series ───
+  // ─── Market-level KPI Time Series (from mart_market_daily_summary) ───
+  // This is the SAME data source as Overview, so numbers always match.
   const marketMetrics = useMemo(() => {
-    const byDate = new Map()
-    for (const s of snapshots) {
-      if (!s.scraped_date) continue
-      const d = s.scraped_date
-      if (!byDate.has(d)) byDate.set(d, { prices: [], pieces: [], ratings: [], themes: new Set(), codes: new Set(), inStock: 0, total: 0, onSale: 0, isNew: 0 })
-      const b = byDate.get(d)
-      b.codes.add(s.product_code)
-      b.total++
-      if (s.theme) b.themes.add(s.theme)
-      const price = Number(s.price_usd)
-      if (price > 0) b.prices.push(price)
-      const pc = Number(s.piece_count)
-      if (pc > 0) b.pieces.push(pc)
-      const rating = Number(s.avg_rating || s.rating)
-      if (rating > 0) b.ratings.push(rating)
-      if (s.in_stock) b.inStock++
-      if (s.is_on_sale || s.sale_percentage > 0) b.onSale++
-      if (s.is_new) b.isNew++
-    }
-    const median = (arr) => { if (!arr.length) return 0; const sorted = [...arr].sort((a, b) => a - b); const mid = Math.floor(sorted.length / 2); return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2 }
-    const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
-    return Array.from(byDate.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([date, b]) => ({
-      date: fmtDate(date),
-      totalProducts: b.codes.size,
-      uniqueThemes: b.themes.size,
-      avgPrice: Math.round(avg(b.prices) * 100) / 100,
-      medianPrice: Math.round(median(b.prices) * 100) / 100,
-      totalValue: Math.round(b.prices.reduce((a, c) => a + c, 0)),
-      avgPieces: Math.round(avg(b.pieces)),
-      totalPieces: b.pieces.reduce((a, c) => a + c, 0),
-      avgRating: Math.round(avg(b.ratings) * 10) / 10,
-      inStockPct: b.total > 0 ? Math.round(b.inStock / b.total * 100) : 0,
-      onSaleCount: b.onSale,
-      newCount: b.isNew,
-      minPrice: b.prices.length ? Math.min(...b.prices) : 0,
-      maxPrice: b.prices.length ? Math.max(...b.prices) : 0,
+    return marketTimeSeries.map(m => ({
+      ...m,
+      date: fmtDate(m.date),
+      // Derive avgPieces since the SQL view doesn't have it directly
+      avgPieces: m.totalProducts > 0 ? Math.round(m.totalPieces / m.totalProducts) : 0,
     }))
-  }, [snapshots])
+  }, [marketTimeSeries])
 
   return (
     <div className="space-y-5">
@@ -658,6 +617,15 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUp
   const dragItem = useRef(null)
   const dragOverItem = useRef(null)
 
+  const latestSnapshots = useMemo(() => {
+    const seen = new Map()
+    const sorted = [...snapshots].sort((a, b) => (b.scraped_date || '').localeCompare(a.scraped_date || ''))
+    for (const s of sorted) {
+      if (!seen.has(s.product_code)) seen.set(s.product_code, s)
+    }
+    return Array.from(seen.values())
+  }, [snapshots])
+
   const handleDragStart = (idx) => { dragItem.current = idx }
   const handleDragOver = (e, idx) => { e.preventDefault(); dragOverItem.current = idx }
   const handleDrop = () => {
@@ -671,15 +639,6 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUp
   }
 
   if (loading) return <LoadingSkeleton />
-
-  const latestSnapshots = useMemo(() => {
-    const seen = new Map()
-    const sorted = [...snapshots].sort((a, b) => (b.scraped_date || '').localeCompare(a.scraped_date || ''))
-    for (const s of sorted) {
-      if (!seen.has(s.product_code)) seen.set(s.product_code, s)
-    }
-    return Array.from(seen.values())
-  }, [snapshots])
 
   const handleSave = async () => {
     if (!saveName.trim()) return
@@ -978,6 +937,16 @@ function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBu
     setOrderedDashboards(dashboards)
   }, [dashboards])
 
+  const latestSnapshots = useMemo(() => {
+    if (!snapshots?.length) return []
+    const seen = new Map()
+    const sorted = [...snapshots].sort((a, b) => (b.scraped_date || '').localeCompare(a.scraped_date || ''))
+    for (const s of sorted) {
+      if (!seen.has(s.product_code)) seen.set(s.product_code, s)
+    }
+    return Array.from(seen.values())
+  }, [snapshots])
+
   const handleDragStart = (idx) => { dragItem.current = idx }
   const handleDragOver = (e, idx) => { e.preventDefault(); dragOverItem.current = idx }
   const handleDrop = () => {
@@ -989,16 +958,6 @@ function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBu
     dragItem.current = null
     dragOverItem.current = null
   }
-
-  const latestSnapshots = useMemo(() => {
-    if (!snapshots?.length) return []
-    const seen = new Map()
-    const sorted = [...snapshots].sort((a, b) => (b.scraped_date || '').localeCompare(a.scraped_date || ''))
-    for (const s of sorted) {
-      if (!seen.has(s.product_code)) seen.set(s.product_code, s)
-    }
-    return Array.from(seen.values())
-  }, [snapshots])
 
   if (dashLoading || loading) return <LoadingSkeleton />
 

@@ -40,6 +40,14 @@
  *   GET  /api/new-deals?limit=          → new deals today
  *   GET  /api/theme-health              → theme health scores
  *
+ *   ── Pro Alerts ──
+ *   GET  /api/pro/watchlist              → list pro watchlist
+ *   POST /api/pro/watchlist              → add to watchlist (JSON: {slug, product_name})
+ *   GET  /api/pro/watchlist/remove/:slug → remove from watchlist
+ *   GET  /api/pro/watchlist/sync         → rebuild watchlist from pro subscriptions
+ *   GET  /api/pro/poll                   → trigger manual pro poll
+ *   GET  /api/pro/poll/stats             → recent pro poll run history
+ *
  *   ── Email ──
  *   GET  /api/email/stats               → email delivery breakdown
  *
@@ -252,6 +260,36 @@ export async function getThemeHealth() {
 
 export async function getWeeklyPublicReport() {
   return apiFetch('/api/reports/weekly-public')
+}
+
+
+// ─── Pro Alerts / Watchlist ──────────────────────────────────
+
+export async function getProWatchlist() {
+  return apiFetch('/api/pro/watchlist')
+}
+
+export async function addToProWatchlist(slug, productName) {
+  return apiFetch('/api/pro/watchlist', {
+    method: 'POST',
+    body: JSON.stringify({ slug, product_name: productName }),
+  })
+}
+
+export async function removeFromProWatchlist(slug) {
+  return apiFetch(`/api/pro/watchlist/remove/${encodeURIComponent(slug)}`)
+}
+
+export async function syncProWatchlist() {
+  return apiFetch('/api/pro/watchlist/sync')
+}
+
+export async function triggerProPoll() {
+  return apiFetch('/api/pro/poll')
+}
+
+export async function getProPollStats() {
+  return apiFetch('/api/pro/poll/stats')
 }
 
 

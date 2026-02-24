@@ -128,12 +128,35 @@ function SubscriptionsTab({ user, onUpgrade }) {
             <h2 className="font-display font-semibold text-sm text-gray-300">My Alert Subscriptions</h2>
             {apiAvailable === false && <span className="px-2 py-0.5 bg-lego-yellow/10 text-lego-yellow text-[9px] font-bold rounded-full">Offline Mode</span>}
           </div>
-          <p className="text-[10px] text-gray-500 mt-0.5">{subscriptions.length} active alert{subscriptions.length !== 1 ? 's' : ''} · Evaluated after each scrape</p>
+          <p className="text-[10px] text-gray-500 mt-0.5">
+            {subscriptions.length} active alert{subscriptions.length !== 1 ? 's' : ''}
+            {sub.isPro
+              ? ' · Pro alerts checked every 15 min'
+              : ' · Evaluated after each scrape'
+            }
+          </p>
         </div>
         <button onClick={handleNewAlert} className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors">
           <Plus size={14} /> New Alert
         </button>
       </div>
+
+      {/* Pro banner for free users */}
+      {!sub.isPro && subscriptions.length > 0 && (
+        <div className="glass rounded-lg p-3 border border-amber-500/20 bg-amber-500/5">
+          <div className="flex items-center gap-2">
+            <Crown size={14} className="text-amber-400 shrink-0" />
+            <div className="flex-1">
+              <p className="text-[11px] text-amber-200 font-medium">
+                Pro alerts check prices every 15 minutes instead of waiting for the full daily scrape.
+              </p>
+            </div>
+            <button onClick={onUpgrade} className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-black text-[10px] font-bold rounded-md transition-colors shrink-0">
+              Upgrade
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Usage meter */}
       <div className="glass rounded-lg p-3">
@@ -145,7 +168,7 @@ function SubscriptionsTab({ user, onUpgrade }) {
         )}
       </div>
 
-      {showForm && <NewAlertForm themes={themes} userEmail={user.email} onSubmit={async (alertSub) => { await createSubscription(alertSub); setShowForm(false); sub.refresh() }} onCancel={() => setShowForm(false)} />}
+      {showForm && <NewAlertForm themes={themes} userEmail={user.email} userId={user.id} isPro={sub.isPro} onSubmit={async (alertSub) => { await createSubscription(alertSub); setShowForm(false); sub.refresh() }} onCancel={() => setShowForm(false)} />}
 
       {loading ? <LoadingSkeleton /> : subscriptions.length === 0 && !showForm ? (
         <div className="glass rounded-xl p-10 text-center">
@@ -168,6 +191,11 @@ function SubscriptionsTab({ user, onUpgrade }) {
                   <div className="p-2 rounded-lg bg-lego-red/10 text-lego-red shrink-0 mt-0.5"><Bell size={16} /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
+                      {sub.isPro && s.slug && (
+                        <span className="px-2 py-0.5 bg-amber-500/15 text-amber-400 text-[9px] font-bold rounded-full flex items-center gap-1">
+                          <Zap size={8} /> Pro Alert
+                        </span>
+                      )}
                       {(s.alert_types || s.types || []).map(type => {
                         const info = ALERT_TYPES.find(t => t.key === type)
                         return info ? <span key={type} className={`px-2 py-0.5 bg-white/5 rounded-full text-[9px] font-semibold ${info.color}`}>{info.label}</span> : null
@@ -193,6 +221,9 @@ function SubscriptionsTab({ user, onUpgrade }) {
                       {s.product_code && <span className="font-mono">#{s.product_code}</span>}
                       {s.threshold_pct && <span>≥ {s.threshold_pct}%</span>}
                       {s.threshold_usd && <span>≥ ${s.threshold_usd}</span>}
+                      {sub.isPro && s.slug && (
+                        <span className="text-amber-500/70">· Checked every 15 min</span>
+                      )}
                     </div>
                   </div>
                   {confirmDelete === s.id ? (
@@ -213,7 +244,7 @@ function SubscriptionsTab({ user, onUpgrade }) {
   )
 }
 
-function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
+function NewAlertForm({ themes, userEmail, userId, isPro, onSubmit, onCancel }) {
   // Email is LOCKED to the user's registered email — no sharing accounts
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [selectedTypes, setSelectedTypes] = useState(['price_drop', 'back_in_stock'])
@@ -228,12 +259,18 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
     setSubmitting(true)
     try {
       await onSubmit({
-        email: userEmail, alert_types: selectedTypes, target_type: 'product',
+        email: userEmail,
+        user_id: userId,
+        alert_types: selectedTypes,
+        target_type: 'product',
         product_code: selectedProduct?.product_code,
+        slug: selectedProduct?.slug,
+        product_name: selectedProduct?.product_name,
         theme_filter: null,
         threshold_pct: thresholdPct ? Number(thresholdPct) : null,
         threshold_usd: thresholdUsd ? Number(thresholdUsd) : null,
-        cooldown_hours: 24, active: true,
+        cooldown_hours: 24,
+        active: true,
       })
     } catch (e) { console.error('Failed to create alert:', e) }
     setSubmitting(false)
@@ -241,7 +278,15 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
 
   return (
     <div className="glass rounded-xl p-5 border border-lego-red/20">
-      <div className="flex items-center gap-2 mb-4"><Zap size={16} className="text-lego-red" /><h3 className="font-display font-semibold text-sm">Create New Alert</h3></div>
+      <div className="flex items-center gap-2 mb-4">
+        <Zap size={16} className="text-lego-red" />
+        <h3 className="font-display font-semibold text-sm">Create New Alert</h3>
+        {isPro && (
+          <span className="px-2 py-0.5 bg-amber-500/15 text-amber-400 text-[9px] font-bold rounded-full flex items-center gap-1 ml-auto">
+            <Zap size={8} /> Pro — checks every 15 min
+          </span>
+        )}
+      </div>
 
       {/* Email — locked to registered email */}
       <div className="mb-4">
@@ -284,7 +329,9 @@ function NewAlertForm({ themes, userEmail, onSubmit, onCancel }) {
         </div>
       )}
       <div className="flex items-center justify-between pt-3 border-t border-lego-border/50">
-        <p className="text-[10px] text-gray-500">Evaluated after each daily scrape. 24h cooldown.</p>
+        <p className="text-[10px] text-gray-500">
+          {isPro ? 'Pro alert — checked every 15 min. 24h cooldown.' : 'Evaluated after each daily scrape. 24h cooldown.'}
+        </p>
         <div className="flex gap-2">
           <button onClick={onCancel} className="px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white transition-colors">Cancel</button>
           <button onClick={handleSubmit} disabled={selectedTypes.length === 0 || submitting || !selectedProduct} className="flex items-center gap-1.5 px-4 py-2 bg-lego-red hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50">
@@ -306,11 +353,22 @@ function AlertHistoryTab() {
     <div className="space-y-2">
       {history.map((alert, i) => {
         const typeInfo = ALERT_TYPES.find(t => t.key === alert.alert_type); const TypeIcon = typeInfo?.icon || Bell
+        const isProAlert = alert.details?.source === 'pro_poll'
         return (
           <div key={alert.id || i} className="glass rounded-lg p-3 hover:bg-white/[0.02] transition-colors">
             <div className="flex items-start gap-3">
               <div className="p-1.5 rounded-lg bg-white/5"><TypeIcon size={14} className={typeInfo?.color || 'text-gray-400'} /></div>
-              <div className="flex-1 min-w-0"><div className="text-xs text-white font-medium">{alert.product_name || alert.slug || 'Catalog Alert'}</div><div className="text-[10px] text-gray-500 mt-0.5">{typeInfo?.label || alert.alert_type}{alert.message && ` — ${alert.message}`}</div></div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-white font-medium">{alert.product_name || alert.slug || 'Catalog Alert'}</span>
+                  {isProAlert && (
+                    <span className="px-1.5 py-0.5 bg-amber-500/15 text-amber-400 text-[8px] font-bold rounded-full flex items-center gap-0.5">
+                      <Zap size={7} /> PRO
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-gray-500 mt-0.5">{typeInfo?.label || alert.alert_type}{alert.message && ` — ${alert.message}`}</div>
+              </div>
               <div className="text-[10px] text-gray-600 shrink-0">{fmtTime(alert.fired_at || alert.created_at)}</div>
             </div>
           </div>

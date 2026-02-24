@@ -40,6 +40,71 @@ function SectionHeader({ icon, title, subtitle, count }) {
   )
 }
 
+// ═══════════════════════════════════════════════════════
+// STOCK STATUS HELPERS (four-tier)
+// ═══════════════════════════════════════════════════════
+
+function getStockTier(availabilityStatus) {
+  switch (availabilityStatus) {
+    case 'E_AVAILABLE': return 'in_stock'
+    case 'G_BACKORDER':
+    case 'F_BACKORDER_FOR_DATE': return 'backorder'
+    case 'H_OUT_OF_STOCK':
+    case 'K_SOLD_OUT':
+    case 'R_RETIRED': return 'oos'
+    case 'A_PRE_ORDER_FOR_DATE':
+    case 'B_COMING_SOON_AT_DATE': return 'prerelease'
+    default: return 'unknown'
+  }
+}
+
+function StockBadge({ availabilityStatus, inStock }) {
+  const tier = getStockTier(availabilityStatus)
+  switch (tier) {
+    case 'in_stock':
+      return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-lego-green/15 text-lego-green">In Stock</span>
+    case 'backorder':
+      return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-400/15 text-blue-400">Backorder</span>
+    case 'oos':
+      return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-400">OOS</span>
+    case 'prerelease':
+      return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-400/15 text-purple-400">Pre-Release</span>
+    default:
+      // Fallback to boolean if no availability_status
+      if (inStock) return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-lego-green/15 text-lego-green">In Stock</span>
+      return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-400">OOS</span>
+  }
+}
+
+function formatAvailabilityStatus(status) {
+  const map = {
+    'E_AVAILABLE': 'In Stock',
+    'G_BACKORDER': 'Backorder',
+    'F_BACKORDER_FOR_DATE': 'Backorder (Dated)',
+    'K_SOLD_OUT': 'Sold Out',
+    'H_OUT_OF_STOCK': 'Out of Stock',
+    'R_RETIRED': 'Retired',
+    'B_COMING_SOON_AT_DATE': 'Coming Soon',
+    'A_PRE_ORDER_FOR_DATE': 'Pre-Order',
+  }
+  return map[status] || status || 'Unknown'
+}
+
+function statusColor(status) {
+  const map = {
+    'E_AVAILABLE': 'text-lego-green',
+    'G_BACKORDER': 'text-blue-400',
+    'F_BACKORDER_FOR_DATE': 'text-blue-400',
+    'K_SOLD_OUT': 'text-red-400',
+    'H_OUT_OF_STOCK': 'text-red-400',
+    'R_RETIRED': 'text-gray-400',
+    'B_COMING_SOON_AT_DATE': 'text-purple-400',
+    'A_PRE_ORDER_FOR_DATE': 'text-purple-400',
+  }
+  return map[status] || 'text-gray-500'
+}
+
+
 export default function MarketReport() {
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -129,7 +194,7 @@ export default function MarketReport() {
         <NewDealsSection deals={report.new_deals} />
 
         {/* ── Gone / Going Scarce ── */}
-        <GoneScarceSection items={report.gone_scarce} premiumOosPct={h.premium_oos_pct} premiumOosDelta={h.premium_oos_delta} />
+        <GoneScarceSection items={report.gone_scarce} highlights={h} />
 
         {/* ── Theme Leaders ── */}
         <ThemeLeadersSection themes={report.theme_leaders} />
@@ -214,7 +279,8 @@ function HighlightsGrid({ highlights: h, newSetsCount, newDealsCount }) {
       label: 'Stock Pulse',
       items: [
         { name: 'In-stock rate', value: `${h.in_stock_pct ?? '—'}%`, delta: h.in_stock_pct_delta, suffix: 'pp' },
-        { name: '$200+ OOS rate', value: `${h.premium_oos_pct ?? '—'}%`, delta: h.premium_oos_delta, suffix: 'pp', invert: true },
+        { name: 'Backorder rate', value: `${h.backorder_pct ?? '—'}%`, color: 'text-blue-400' },
+        { name: 'OOS rate', value: `${h.oos_pct ?? '—'}%`, color: 'text-orange-400' },
       ],
       color: 'text-lego-green',
       icon: <Package size={14} />,
@@ -257,7 +323,7 @@ function HighlightsGrid({ highlights: h, newSetsCount, newDealsCount }) {
               {card.items.map(item => (
                 <div key={item.name}>
                   <div className="flex items-baseline justify-between">
-                    <span className="font-display font-bold text-lg text-white">{item.value}</span>
+                    <span className={`font-display font-bold text-lg ${item.color || 'text-white'}`}>{item.value}</span>
                     {item.delta !== undefined && <Delta value={item.delta} suffix={item.suffix || ''} invert={item.invert} />}
                   </div>
                   <div className="text-[10px] text-gray-500">{item.name}</div>
@@ -391,11 +457,7 @@ function NewSetsSection({ sets }) {
                   <td className="py-2 px-3 text-right font-mono text-gray-400">{s.piece_count || '—'}</td>
                   <td className="py-2 px-3 text-center">
                     <div className="flex items-center justify-center gap-1.5">
-                      {s.in_stock ? (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-lego-green/15 text-lego-green">In Stock</span>
-                      ) : (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-400">OOS</span>
-                      )}
+                      <StockBadge availabilityStatus={s.availability_status} inStock={s.in_stock} />
                       {s.on_sale && (
                         <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-lego-red/15 text-lego-red">Sale</span>
                       )}
@@ -463,11 +525,7 @@ function NewDealsSection({ deals }) {
                     </span>
                   </td>
                   <td className="py-2 px-3 text-center">
-                    {d.in_stock ? (
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-lego-green/15 text-lego-green">In Stock</span>
-                    ) : (
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-400">OOS</span>
-                    )}
+                    <StockBadge availabilityStatus={d.availability_status} inStock={d.in_stock} />
                   </td>
                 </tr>
               ))}
@@ -488,74 +546,60 @@ function NewDealsSection({ deals }) {
 }
 
 
+function GoneScarceSection({ items, highlights: h }) {
+  // Separate went_oos from went_backorder
+  const allItems = items || []
+  const oosItems = allItems.filter(item => item.transition_type === 'went_oos')
+  const backorderItems = allItems.filter(item => item.transition_type === 'went_backorder')
 
-function formatAvailabilityStatus(status) {
-  const map = {
-    'E_AVAILABLE': 'In Stock',
-    'G_BACKORDER': 'Backorder',
-    'F_BACKORDER_FOR_DATE': 'Backorder (Dated)',
-    'K_SOLD_OUT': 'Sold Out',
-    'H_OUT_OF_STOCK': 'Out of Stock',
-    'R_RETIRED': 'Retired',
-    'B_COMING_SOON_AT_DATE': 'Coming Soon',
-    'A_PRE_ORDER_FOR_DATE': 'Pre-Order',
-  }
-  return map[status] || status || 'Unknown'
-}
-
-function statusColor(status) {
-  const map = {
-    'E_AVAILABLE': 'text-lego-green',
-    'G_BACKORDER': 'text-orange-400',
-    'F_BACKORDER_FOR_DATE': 'text-orange-400',
-    'K_SOLD_OUT': 'text-red-400',
-    'H_OUT_OF_STOCK': 'text-red-400',
-    'R_RETIRED': 'text-gray-400',
-    'B_COMING_SOON_AT_DATE': 'text-blue-400',
-    'A_PRE_ORDER_FOR_DATE': 'text-purple-400',
-  }
-  return map[status] || 'text-gray-500'
-}
-
-
-function GoneScarceSection({ items, premiumOosPct, premiumOosDelta }) {
-  // Filter to $100+ sets, sorted by MSRP descending
-  const premiumItems = (items || [])
+  // Premium items for the table: $100+ that went OOS or backorder, sorted by price
+  const premiumItems = allItems
     .filter(item => Number(item.price_usd || 0) >= 100)
     .sort((a, b) => Number(b.price_usd || 0) - Number(a.price_usd || 0))
     .slice(0, 10)
 
   const hasItems = premiumItems.length > 0
-  const totalOosCount = (items || []).length
 
   return (
     <div className="mb-8">
       <SectionHeader
         icon={<AlertTriangle size={18} className="text-orange-400" />}
         title="Went Out of Stock This Week"
-        subtitle={hasItems ? `Premium sets ($100+) that disappeared from shelves` : 'Tracking $100+ sets that go out of stock'}
+        subtitle={hasItems ? 'Premium sets ($100+) that disappeared from shelves' : 'Tracking $100+ sets that go out of stock'}
         count={hasItems ? premiumItems.length : undefined}
       />
 
-      {/* Premium OOS stat card */}
-      <div className="glass rounded-lg px-4 py-3 mb-3 flex flex-wrap items-center gap-4">
-        {premiumOosPct !== null && premiumOosPct !== undefined && (
+      {/* Premium stock breakdown stat cards */}
+      <div className="glass rounded-lg px-4 py-3 mb-3 flex flex-wrap items-center gap-x-5 gap-y-2">
+        {h.premium_oos_pct !== null && h.premium_oos_pct !== undefined && (
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-gray-400">$200+ OOS rate:</span>
-            <span className="font-display font-bold text-orange-400">{Number(premiumOosPct).toFixed(1)}%</span>
-            <Delta value={premiumOosDelta} suffix="pp" invert={true} />
+            <span className="text-[11px] text-gray-400">$200+ OOS:</span>
+            <span className="font-display font-bold text-orange-400">{Number(h.premium_oos_pct).toFixed(1)}%</span>
+            <Delta value={h.premium_oos_delta} suffix="pp" invert={true} />
           </div>
         )}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-gray-400">Total went OOS:</span>
-          <span className="font-display font-bold text-white">{totalOosCount}</span>
+        {h.premium_backorder_pct !== null && h.premium_backorder_pct !== undefined && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-400">$200+ Backorder:</span>
+            <span className="font-display font-bold text-blue-400">{Number(h.premium_backorder_pct).toFixed(1)}%</span>
+          </div>
+        )}
+        {h.premium_available_pct !== null && h.premium_available_pct !== undefined && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-400">$200+ Available:</span>
+            <span className="font-display font-bold text-lego-green">{Number(h.premium_available_pct).toFixed(1)}%</span>
+          </div>
+        )}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-400">Went OOS:</span>
+            <span className="font-display font-bold text-orange-400">{oosItems.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-400">Went Backorder:</span>
+            <span className="font-display font-bold text-blue-400">{backorderItems.length}</span>
+          </div>
         </div>
-        {hasItems && (
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-gray-400">$100+ went OOS:</span>
-            <span className="font-display font-bold text-orange-400">{premiumItems.length}</span>
-          </div>
-        )}
       </div>
 
       {hasItems ? (
@@ -728,24 +772,38 @@ function TierHeatmapSection({ tiers }) {
               <div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-bold text-lego-red">{Number(t.on_sale_pct || 0).toFixed(0)}%</span>
-                  <Delta value={t.on_sale_pct_delta} suffix="pp" />
                 </div>
                 <div className="text-[9px] text-gray-500 uppercase">On sale</div>
               </div>
               <div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-bold text-lego-yellow">{t.median_discount ? `${Number(t.median_discount).toFixed(0)}%` : '—'}</span>
-                  <Delta value={t.median_discount_delta} suffix="pp" />
                 </div>
                 <div className="text-[9px] text-gray-500 uppercase">Med. discount</div>
               </div>
+              {/* Stock breakdown: In Stock / Backorder / OOS */}
               <div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-bold text-lego-green">{Number(t.in_stock_pct || 0).toFixed(0)}%</span>
-                  <Delta value={t.in_stock_pct_delta} suffix="pp" />
                 </div>
                 <div className="text-[9px] text-gray-500 uppercase">In stock</div>
               </div>
+              {Number(t.backorder_pct || 0) > 0 && (
+                <div>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-sm font-bold text-blue-400">{Number(t.backorder_pct).toFixed(0)}%</span>
+                  </div>
+                  <div className="text-[9px] text-gray-500 uppercase">Backorder</div>
+                </div>
+              )}
+              {Number(t.oos_pct || 0) > 0 && (
+                <div>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-sm font-bold text-orange-400">{Number(t.oos_pct).toFixed(0)}%</span>
+                  </div>
+                  <div className="text-[9px] text-gray-500 uppercase">Out of stock</div>
+                </div>
+              )}
             </div>
           </div>
         ))}

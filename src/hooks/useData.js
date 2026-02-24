@@ -50,12 +50,47 @@ export function useStats() {
 
   useEffect(() => {
     async function fetch() {
-      const [productRes, runRes] = await Promise.all([
-        supabase.from('raw_product_details').select('slug', { count: 'exact', head: true }),
-        supabase.from('raw_ingest_run').select('*', { count: 'exact', head: true }),
-      ])
+      // ── Primary source: mart_market_daily_summary (latest row) ──
+      // This is the SAME view that powers Time Series, so Overview and
+      // Time Series always show identical numbers for any given date.
+      const { data: marketRows, error: marketErr } = await supabase
+        .from('mart_market_daily_summary')
+        .select('*')
+        .order('scraped_date', { ascending: false })
+        .limit(1)
 
-      // Use the materialized view (one row per product) instead of full table scan
+      if (marketRows && marketRows.length > 0 && !marketErr) {
+        const m = marketRows[0]
+        setStats({
+          totalProducts: Number(m.product_count) || 0,
+          uniqueThemes: Number(m.theme_count) || 0,
+          avgPrice: Number(m.avg_price) || 0,
+          medianPrice: Number(m.median_price) || 0,
+          totalCatalogValue: Math.round(Number(m.catalog_value) || 0),
+          totalPieces: Number(m.total_pieces) || 0,
+          avgRating: Number(m.avg_rating) || 0,
+          inStockPct: Number(m.in_stock_pct) || 0,
+          onSaleCount: Number(m.on_sale_count) || 0,
+          newCount: Number(m.new_count) || 0,
+          minPrice: Number(m.min_price) || 0,
+          maxPrice: Number(m.max_price) || 0,
+          avgPricePerPiece: Number(m.avg_price_per_piece) || 0,
+          totalVipPoints: Number(m.total_vip_points) || 0,
+          // Change indicators (vs previous day)
+          productCountChange: m.product_count_change != null ? Number(m.product_count_change) : null,
+          onSaleChange: m.on_sale_change != null ? Number(m.on_sale_change) : null,
+          avgPriceChange: m.avg_price_change != null ? Number(m.avg_price_change) : null,
+          catalogValueChange: m.catalog_value_change != null ? Number(m.catalog_value_change) : null,
+          // Metadata
+          scrapedDate: m.scraped_date,
+        })
+        setLoading(false)
+        return
+      }
+
+      // ── Fallback: compute from v_latest_products if the mart view ──
+      // doesn't exist yet (first-time setup / migration pending)
+      console.warn('mart_market_daily_summary not available, falling back to v_latest_products')
       const { data: snap } = await supabase
         .from('v_latest_products')
         .select('product_code, price_usd, enriched_price_usd, rating, enriched_rating, in_stock, on_sale, theme, is_new, piece_count, enriched_piece_count, scraped_date')
@@ -69,13 +104,10 @@ export function useStats() {
 
         setStats({
           totalProducts: products.length,
-          totalRuns: runRes.count || 0,
-          totalSnapshots: productRes.count || 0,
           uniqueThemes: new Set(products.filter(r => r.theme).map(r => r.theme)).size,
           avgPrice: prices.length ? Number((totalValue / prices.length).toFixed(2)) : 0,
           medianPrice: prices.length ? Number(prices.sort((a, b) => a - b)[Math.floor(prices.length / 2)].toFixed(2)) : 0,
           totalCatalogValue: Math.round(totalValue),
-          inStockCount: products.filter(r => r.in_stock).length,
           inStockPct: products.length ? Math.round((products.filter(r => r.in_stock).length / products.length) * 100) : 0,
           onSaleCount: products.filter(r => r.on_sale).length,
           newCount: products.filter(r => r.is_new).length,
@@ -84,6 +116,10 @@ export function useStats() {
           totalPieces: pieces.reduce((a, b) => a + b, 0),
           minPrice: prices.length ? Math.min(...prices) : 0,
           maxPrice: prices.length ? Math.max(...prices) : 0,
+          productCountChange: null,
+          onSaleChange: null,
+          avgPriceChange: null,
+          catalogValueChange: null,
         })
       }
       setLoading(false)
@@ -91,6 +127,49 @@ export function useStats() {
     fetch()
   }, [])
   return { stats, loading }
+}
+
+// ── Market daily summary for Time Series tab ──
+// Reads from the SAME mart_market_daily_summary view so numbers are
+// guaranteed identical to the Overview KPIs for any given date.
+export function useMarketTimeSeries() {
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetch() {
+      const { data: rows, error } = await supabase
+        .from('mart_market_daily_summary')
+        .select('*')
+        .order('scraped_date', { ascending: true })
+
+      if (error) {
+        console.warn('mart_market_daily_summary not available:', error.message)
+        setData([])
+      } else {
+        setData((rows || []).map(m => ({
+          date: m.scraped_date,
+          totalProducts: Number(m.product_count) || 0,
+          uniqueThemes: Number(m.theme_count) || 0,
+          avgPrice: Number(m.avg_price) || 0,
+          medianPrice: Number(m.median_price) || 0,
+          totalValue: Math.round(Number(m.catalog_value) || 0),
+          totalPieces: Number(m.total_pieces) || 0,
+          avgRating: Number(m.avg_rating) || 0,
+          inStockPct: Number(m.in_stock_pct) || 0,
+          onSaleCount: Number(m.on_sale_count) || 0,
+          newCount: Number(m.new_count) || 0,
+          minPrice: Number(m.min_price) || 0,
+          maxPrice: Number(m.max_price) || 0,
+          avgPricePerPiece: Number(m.avg_price_per_piece) || 0,
+        })))
+      }
+      setLoading(false)
+    }
+    fetch()
+  }, [])
+
+  return { data, loading }
 }
 
 export function useProducts(filters = {}) {
