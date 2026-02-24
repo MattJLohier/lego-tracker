@@ -17,6 +17,7 @@ import { useSubscription } from '../hooks/useSubscription'
 import { trackTabSwitch, trackChartCreated, trackDashboardSaved } from '../lib/analytics'
 import { normalizeStatus, getStatusInfo, getStatusDisplay } from '../lib/stockStatus'
 import { ProGate, UpgradeModal, UpgradeBanner } from '../components/UpgradeModal'
+import MarketStatusTab from '../components/MarketStatusTab'
 
 const CHART_COLORS = ['#E3000B', '#FFD500', '#006CB7', '#00963F', '#FF6B6B', '#a78bfa', '#f97316', '#06b6d4', '#ec4899', '#84cc16', '#f59e0b', '#8b5cf6', '#14b8a6', '#ef4444', '#6366f1', '#22c55e']
 const TOOLTIP_STYLE = { background: '#16161F', border: '1px solid #2A2A3D', borderRadius: '8px', fontSize: '11px' }
@@ -90,7 +91,12 @@ export default function Analytics() {
           marketAlerts ? <MarketPriceSwingsTab swings={marketAlerts.priceSwings} /> : maL ? <LoadingSkeleton /> : null
         )}
         {activeTab === 'status' && (
-          marketAlerts ? <MarketStatusTab statusChanges={marketAlerts.statusChanges} discontinued={marketAlerts.discontinued} statusOverTime={marketAlerts.statusOverTime} /> : maL ? <LoadingSkeleton /> : null
+          marketAlerts ? <MarketStatusTab
+            statusChanges={marketAlerts.statusChanges}
+            discontinued={marketAlerts.discontinued}
+            statusOverTime={marketAlerts.statusOverTime}
+            newDebuts={marketAlerts.newDebuts}
+          /> : maL ? <LoadingSkeleton /> : null
         )}
         {activeTab === 'sales' && (
           marketAlerts ? <MarketSalesTab sales={marketAlerts.newSales} /> : maL ? <LoadingSkeleton /> : null
@@ -1380,25 +1386,6 @@ function MarketPriceSwingsTab({ swings }) {
   )
 }
 
-function MarketStatusTab({ statusChanges, discontinued, statusOverTime }) {
-  function StatusBadge({ status }) {
-    const info = getStatusDisplay(status, undefined)
-    return <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full border ${info.bgClass} ${info.textClass} ${info.borderClass} whitespace-nowrap`}>{info.displayLabel}</span>
-  }
-  return (
-    <div className="space-y-5">
-      {statusOverTime.data.length > 1 && (
-        <ChartCard title="Status Distribution Over Time" subtitle="Catalog-wide availability trends">
-          <div className="h-[350px]"><ResponsiveContainer width="100%" height="100%"><AreaChart data={statusOverTime.data}><CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" /><XAxis dataKey="date" tick={{ fill: '#888', fontSize: 10 }} tickFormatter={fmtDate} /><YAxis tick={{ fill: '#555', fontSize: 10 }} /><Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={fmtDate} /><RLegend wrapperStyle={{ fontSize: '10px', color: '#888' }} />{statusOverTime.statuses.map((s, i) => <Area key={s} type="monotone" dataKey={s} stackId="1" fill={CHART_COLORS[i % CHART_COLORS.length]} stroke={CHART_COLORS[i % CHART_COLORS.length]} fillOpacity={0.6} />)}</AreaChart></ResponsiveContainer></div>
-        </ChartCard>
-      )}
-      {discontinued.length > 0 && <ChartCard title="Retiring / Discontinued" subtitle={`${discontinued.length} sets`}><div className="space-y-2">{discontinued.map((sc, i) => (<Link key={`${sc.product_code}-${i}`} to={`/product/${sc.slug}`} className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/[0.03] transition-colors group"><AlertTriangle size={14} className="text-red-400 shrink-0" /><div className="flex-1 min-w-0"><div className="text-xs text-white font-semibold truncate group-hover:text-lego-yellow">{sc.product_name}</div><div className="text-[10px] text-gray-500">{sc.theme} · {fmtDateLong(sc.date)}</div></div><div className="flex items-center gap-2 shrink-0"><StatusBadge status={sc.fromStatus} /><ArrowRight size={12} className="text-gray-600" /><StatusBadge status={sc.toStatus} /></div></Link>))}</div></ChartCard>}
-      <ChartCard title="All Status Changes" subtitle={`${statusChanges.length} transitions`}><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="border-b border-lego-border">{['Date', 'Product', 'From', '', 'To', 'Price'].map((h, i) => <th key={i} className="py-2 px-2 text-[10px] font-mono text-gray-500 uppercase text-left">{h}</th>)}</tr></thead><tbody>
-        {statusChanges.slice(0, 40).map((sc, i) => (<tr key={`${sc.product_code}-${i}`} className="border-b border-lego-border/30 hover:bg-white/[0.02]"><td className="py-2 px-2 text-gray-500">{fmtDate(sc.date)}</td><td className="py-2 px-2"><Link to={`/product/${sc.slug}`} className="text-white hover:text-lego-yellow font-medium">{sc.product_name}</Link></td><td className="py-2 px-2"><StatusBadge status={sc.fromStatus} /></td><td className="py-1 px-1"><ArrowRight size={10} className="text-gray-600" /></td><td className="py-2 px-2"><StatusBadge status={sc.toStatus} /></td><td className="py-2 px-2 font-mono text-lego-yellow">${sc.price.toFixed(2)}</td></tr>))}
-      </tbody></table></div></ChartCard>
-    </div>
-  )
-}
 
 function MarketSalesTab({ sales }) {
   return (

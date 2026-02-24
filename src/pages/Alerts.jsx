@@ -21,6 +21,7 @@ const ALERT_TYPES = [
   { key: 'new_deal', label: 'New Sale', icon: Tag, color: 'text-lego-yellow', desc: 'Product goes on sale' },
   { key: 'sale_ended', label: 'Sale Ended', icon: X, color: 'text-gray-400', desc: 'Sale ends on product' },
   { key: 'retirement_risk', label: 'Retirement Risk', icon: Flame, color: 'text-red-400', desc: 'High retirement risk detected' },
+  { key: 'backorder_change', label: 'Backorder Update', icon: Package, color: 'text-purple-400', desc: 'Backorder status or date changes' },
 ]
 
 const TABS = [
@@ -330,7 +331,7 @@ function NewAlertForm({ themes, userEmail, userId, isPro, onSubmit, onCancel }) 
       )}
       <div className="flex items-center justify-between pt-3 border-t border-lego-border/50">
         <p className="text-[10px] text-gray-500">
-          {isPro ? 'Pro alert — checked every 15 min. 24h cooldown.' : 'Evaluated after each daily scrape. 24h cooldown.'}
+          {isPro ? 'Pro alert — checked up to 6x per hour.' : 'Evaluated after each daily scrape. 24h cooldown.'}
         </p>
         <div className="flex gap-2">
           <button onClick={onCancel} className="px-4 py-2 glass text-gray-400 text-xs font-semibold rounded-lg hover:text-white transition-colors">Cancel</button>

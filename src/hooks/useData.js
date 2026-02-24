@@ -354,8 +354,8 @@ export function useProductDetail(slug) {
           }
           if (!latest._resolved_image_url) {
             latest._resolved_image_url = 
+              nested.baseImgUrl ||
               nested.primaryImage || 
-              nested.baseImgUrl || 
               nested.variants?.[0]?.primaryImage ||
               null
           }
