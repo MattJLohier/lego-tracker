@@ -131,8 +131,8 @@ function SubscriptionsTab({ user, onUpgrade }) {
           <p className="text-[10px] text-gray-500 mt-0.5">
             {subscriptions.length} active alert{subscriptions.length !== 1 ? 's' : ''}
             {sub.isPro
-              ? ' · Pro alerts checked every 15 min'
-              : ' · Evaluated after each scrape'
+              ? ' · Checked all day (about 70×/day) '
+              : ' · Checked daily'
             }
           </p>
         </div>
@@ -191,9 +191,9 @@ function SubscriptionsTab({ user, onUpgrade }) {
                   <div className="p-2 rounded-lg bg-lego-red/10 text-lego-red shrink-0 mt-0.5"><Bell size={16} /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      {sub.isPro && s.slug && (
+                      {sub.isPro && (
                         <span className="px-2 py-0.5 bg-amber-500/15 text-amber-400 text-[9px] font-bold rounded-full flex items-center gap-1">
-                          <Zap size={8} /> Pro Alert
+                          <Zap size={8} /> Pro
                         </span>
                       )}
                       {(s.alert_types || s.types || []).map(type => {
@@ -221,8 +221,8 @@ function SubscriptionsTab({ user, onUpgrade }) {
                       {s.product_code && <span className="font-mono">#{s.product_code}</span>}
                       {s.threshold_pct && <span>≥ {s.threshold_pct}%</span>}
                       {s.threshold_usd && <span>≥ ${s.threshold_usd}</span>}
-                      {sub.isPro && s.slug && (
-                        <span className="text-amber-500/70">· Checked every 15 min</span>
+                      {sub.isPro && (
+                        <span className="text-amber-500/70">· Checked up to 6× per hour </span>
                       )}
                     </div>
                   </div>
@@ -283,7 +283,7 @@ function NewAlertForm({ themes, userEmail, userId, isPro, onSubmit, onCancel }) 
         <h3 className="font-display font-semibold text-sm">Create New Alert</h3>
         {isPro && (
           <span className="px-2 py-0.5 bg-amber-500/15 text-amber-400 text-[9px] font-bold rounded-full flex items-center gap-1 ml-auto">
-            <Zap size={8} /> Pro — checks every 15 min
+            <Zap size={8} /> Pro — Checks up to 6x per hour
           </span>
         )}
       </div>
