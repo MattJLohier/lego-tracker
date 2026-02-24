@@ -54,7 +54,7 @@ export default function ProductDetail() {
     return history.map(h => {
       const statusInfo = getStatusDisplay(h.availability_status, h.in_stock, h.availability_text)
       return {
-        date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
         status: statusInfo.displayLabel,
         inStock: 1, // Always 1 so the bar renders; color conveys the status
         color: statusInfo.color,
@@ -114,7 +114,7 @@ export default function ProductDetail() {
   const priceChangePct = firstPrice > 0 ? ((priceChange / firstPrice) * 100).toFixed(1) : 0
 
   const chartData = history.map(h => ({
-    date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
     price: Number(h.price_usd),
     inStock: h.in_stock,
   }))
@@ -159,7 +159,7 @@ export default function ProductDetail() {
 
             <div className="grid grid-cols-2 gap-2">
               <MiniStat icon={<Clock size={13} />} label="Days Tracked" value={daysTracked} />
-              <MiniStat icon={<CalendarDays size={13} />} label="First Seen" value={firstSeen ? new Date(firstSeen).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} />
+              <MiniStat icon={<CalendarDays size={13} />} label="First Seen" value={firstSeen ? new Date(firstSeen).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—'} />
               <MiniStat icon={<ShoppingBag size={13} />} label="Status" 
                 value={getStatusDisplay(availability_status, in_stock, product.availability_text).displayLabel} 
                 color={getStatusDisplay(availability_status, in_stock, product.availability_text).textClass} />
@@ -176,7 +176,7 @@ export default function ProductDetail() {
                   <div>
                     <div className="text-[9px] font-mono text-gray-500 uppercase">Low</div>
                     <div className="text-sm font-bold text-green-400">${priceStats.min.toFixed(2)}</div>
-                    {priceStats.minDate && <div className="text-[9px] text-gray-600">{new Date(priceStats.minDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>}
+                    {priceStats.minDate && <div className="text-[9px] text-gray-600">{new Date(priceStats.minDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}</div>}
                   </div>
                   <div>
                     <div className="text-[9px] font-mono text-gray-500 uppercase">Average</div>
@@ -186,7 +186,7 @@ export default function ProductDetail() {
                   <div>
                     <div className="text-[9px] font-mono text-gray-500 uppercase">High</div>
                     <div className="text-sm font-bold text-red-400">${priceStats.max.toFixed(2)}</div>
-                    {priceStats.maxDate && <div className="text-[9px] text-gray-600">{new Date(priceStats.maxDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>}
+                    {priceStats.maxDate && <div className="text-[9px] text-gray-600">{new Date(priceStats.maxDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}</div>}
                   </div>
                 </div>
                 {/* Price range visual bar */}
@@ -358,7 +358,7 @@ export default function ProductDetail() {
                             <StatusBadge status={change.to} />
                           </div>
                           <div className="text-[10px] text-gray-500 mt-1">
-                            {new Date(change.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {new Date(change.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
                           </div>
                         </div>
                       </div>

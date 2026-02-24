@@ -1358,11 +1358,12 @@ function LegendDot({ color, label }) {
 
 function fmtDate(d) {
   if (!d) return ''
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
-function fmtDateLong(d) { return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '' }
-
+function fmtDateLong(d) {
+  return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
+}
 function LoadingSkeleton() { return (<div className="space-y-5">{[1, 2, 3].map(i => (<div key={i} className="glass rounded-xl p-5 animate-pulse"><div className="h-4 bg-lego-surface2 rounded w-48 mb-2" /><div className="h-3 bg-lego-surface2 rounded w-32 mb-4" /><div className="h-[200px] bg-lego-surface2 rounded" /></div>))}</div>) }
 
 /* ========================= MARKET ACTIVITY TABS (moved from Alerts) ========================= */
