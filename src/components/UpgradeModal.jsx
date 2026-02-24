@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { X, Crown, Bell, FileText, Layers, Heart, GitCompareArrows, Zap, Check, Lock, Sparkles } from 'lucide-react'
+import {
+  X, Crown, Bell, FileText, Layers, Heart, GitCompareArrows,
+  Zap, Check, Lock, Sparkles
+} from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
-import { TIERS } from '../hooks/useSubscription'
 
 const STRIPE_CHECKOUT_URL = import.meta.env.VITE_STRIPE_CHECKOUT_URL || null
 
+// ✅ Lead with the speed benefit (this is what sells Pro on the Alerts page)
 const PRO_FEATURES = [
+  { icon: Zap, label: '70 alert checks per day', free: '1 check/day' },
   { icon: Bell, label: '10 Price & Stock Alerts', free: '1 alert' },
   { icon: FileText, label: '10 Automated Reports', free: '1 report' },
   { icon: Layers, label: 'Custom Analytics Builder', free: 'View only' },
@@ -14,6 +18,16 @@ const PRO_FEATURES = [
   { icon: Heart, label: 'Unlimited Watchlist', free: '5 items' },
   { icon: GitCompareArrows, label: 'Unlimited Comparisons', free: '2 items' },
 ]
+
+// Small helper to tailor the modal copy when user is upgrading from Alerts
+const getUpgradeSubtitle = (feature) => {
+  const f = (feature || '').toLowerCase()
+  const isAlerts = f.includes('alert') || f.includes('notification') || f.includes('price') || f.includes('stock')
+  if (isAlerts) {
+    return 'Pro monitors your alerts all day (70 checks/day) so you catch deals while they’re live.'
+  }
+  return 'Unlock the full power of StudMetrics'
+}
 
 /**
  * Upgrade modal shown when a free user tries a Pro feature.
@@ -34,7 +48,7 @@ export function UpgradeModal({ isOpen, onClose, feature = '' }) {
       url.searchParams.set('prefilled_email', user.email)
       url.searchParams.set('client_reference_id', user.id)
 
-      // ✅ ADD THESE — tell Stripe where to redirect after payment
+      // ✅ Redirects after payment
       const origin = window.location.origin
       url.searchParams.set('success_url', `${origin}/pro/success`)
       url.searchParams.set('cancel_url', `${origin}/pro/cancel`)
@@ -57,7 +71,10 @@ export function UpgradeModal({ isOpen, onClose, feature = '' }) {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-1 bg-gradient-to-r from-transparent via-lego-yellow to-transparent" />
 
         {/* Close */}
-        <button onClick={onClose} className="absolute top-4 right-4 p-1.5 text-gray-500 hover:text-white rounded-lg transition-colors z-10">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1.5 text-gray-500 hover:text-white rounded-lg transition-colors z-10"
+        >
           <X size={16} />
         </button>
 
@@ -67,26 +84,29 @@ export function UpgradeModal({ isOpen, onClose, feature = '' }) {
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-lego-yellow/10 border border-lego-yellow/20 mb-4">
               <Crown size={28} className="text-lego-yellow" />
             </div>
+
             <h2 className="font-display font-bold text-2xl tracking-tight mb-1">
               Upgrade to <span className="text-lego-yellow">Pro</span>
             </h2>
-            {feature && (
+
+            {feature ? (
               <p className="text-sm text-gray-400">
                 <Lock size={12} className="inline mr-1" />
                 {feature} requires a Pro subscription
               </p>
-            )}
-            {!feature && (
-              <p className="text-sm text-gray-400">Unlock the full power of StudMetrics</p>
+            ) : (
+              <p className="text-sm text-gray-400">{getUpgradeSubtitle(feature)}</p>
             )}
           </div>
 
           {/* Price */}
-          <div className="text-center mb-6">
+          <div className="text-center mb-4">
             <div className="inline-flex items-baseline gap-1">
               <span className="text-4xl font-display font-bold text-white">$5</span>
               <span className="text-gray-500 text-sm">/month</span>
             </div>
+            {/* ✅ Clear speed comparison without symbols */}
+            <p className="text-xs text-gray-500 mt-2">Free: 1 check/day · Pro: 70 checks/day</p>
           </div>
 
           {/* Features grid */}
@@ -121,7 +141,7 @@ export function UpgradeModal({ isOpen, onClose, feature = '' }) {
               ) : (
                 <Zap size={18} />
               )}
-              Subscribe to Pro
+              Upgrade to Pro
             </button>
           ) : (
             <Link
@@ -174,7 +194,7 @@ export function UpgradeBanner({ feature, compact = false, onUpgradeClick }) {
             Unlock {feature || 'Pro Features'}
           </h3>
           <p className="text-xs text-gray-500 mb-3">
-            Get 10 alerts, 10 reports, custom analytics builder, unlimited watchlist, and more for just $5/month.
+            Get 10 alerts with high-frequency monitoring (70 checks/day), 10 reports, custom analytics builder, unlimited watchlist, and more for $5/month.
           </p>
           <button
             onClick={onUpgradeClick}

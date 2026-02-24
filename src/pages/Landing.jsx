@@ -217,13 +217,18 @@ function FeaturesSection() {
     { feature: 'Browse & search full catalog', free: true, pro: true },
     { feature: 'Market dashboard & analytics', free: true, pro: true },
     { feature: 'Price history charts', free: true, pro: true },
-    { feature: 'Side-by-side comparison', free: true, pro: true },
     { feature: 'Watchlist / portfolio', free: true, pro: true },
-    { feature: 'Weekly market digest', free: true, pro: true },
-    { feature: 'Price drop & restock alerts', free: '1 alert', pro: '10 alerts' },
-    { feature: 'Custom category reports', free: false, pro: '10 reports' },
-    { feature: 'Daily intel updates', free: false, pro: true },
-    { feature: 'Priority data refresh', free: false, pro: true },
+
+    // Theme flexibility (applies to alerts + reports)
+    { feature: 'Theme selection (alerts + reports)', free: 'Any theme', pro: 'Any theme' },
+
+    // Alerts (sell count + speed)
+    { feature: 'Alert subscriptions', free: '1 alert', pro: '10 alerts' },
+    { feature: 'Alert check frequency', free: '1 check/day', pro: '70 checks/day' },
+
+    // Reports (sell count + cadence)
+    { feature: 'Report profiles', free: '1 report', pro: '10 reports' },
+    { feature: 'Report delivery cadence', free: 'Weekly', pro: 'Daily or weekly' },
   ]
 
   return (
@@ -258,7 +263,7 @@ function FeaturesSection() {
               <span className="text-[11px] font-mono text-gray-500 uppercase tracking-wider text-center">Free</span>
               <span className="text-[11px] font-mono text-center">
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-lego-yellow/15 text-lego-yellow text-[10px] font-semibold">
-                  <Crown size={10} /> Pro
+                  <Crown size={10} /> Pro · $5/mo
                 </span>
               </span>
             </div>

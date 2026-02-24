@@ -148,7 +148,7 @@ function SubscriptionsTab({ user, onUpgrade }) {
             <Crown size={14} className="text-amber-400 shrink-0" />
             <div className="flex-1">
               <p className="text-[11px] text-amber-200 font-medium">
-                Pro alerts check prices every 15 minutes instead of waiting for the full daily scrape.
+                Upgrade to Pro — 70× more checks per day so you never miss a deal
               </p>
             </div>
             <button onClick={onUpgrade} className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-black text-[10px] font-bold rounded-md transition-colors shrink-0">
