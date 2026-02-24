@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Private / auth pages
+Disallow: /account
+Disallow: /auth
+Disallow: /alerts
+Disallow: /watchlist
+Disallow: /analytics
+
+Sitemap: https://studmetrics.com/sitemap.xml

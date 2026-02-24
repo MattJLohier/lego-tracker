@@ -23,12 +23,35 @@ import { useStats, useNewProducts, useThemes } from '../hooks/useData'
 import { useAuth } from '../hooks/useAuth'
 import { useSubscription } from '../hooks/useSubscription'
 import { UpgradeModal } from '../components/UpgradeModal'
+import SEO from '../components/SEO'
 
 export default function Landing() {
   const [showUpgrade, setShowUpgrade] = useState(false)
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: 'StudMetrics',
+    url: 'https://studmetrics.com',
+    description: 'LEGO price tracking, deal alerts, and market intelligence platform. Monitor prices, availability, and discount patterns across 1,500+ sets.',
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+      description: 'Free tier with price tracking, alerts, and weekly market reports',
+    },
+  }
+
   return (
     <main>
+      <SEO
+        title="LEGO Price Tracker, Deal Alerts & Market Intelligence"
+        description="Track LEGO set prices in real time, get instant deal alerts, compare market values, and discover the best deals across 1,500+ sets. Free price monitoring updated daily."
+        path="/"
+        jsonLd={jsonLd}
+      />
       <HeroSection onUpgrade={() => setShowUpgrade(true)} />
       <FeaturesSection />
       <NewProductsSection />

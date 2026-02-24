@@ -7,7 +7,7 @@ import {
   ArrowDown, ArrowUp, Minus, Bot, Clock, ExternalLink
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-
+import SEO from '../components/SEO'
 
 function Delta({ value, suffix = '', invert = false, showZero = false }) {
   if (value === null || value === undefined) return <span className="text-gray-600 text-[10px]">—</span>
@@ -139,6 +139,11 @@ export default function MarketReport() {
   if (loading) {
     return (
       <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
+        <SEO
+          title="LEGO Weekly Market Report — Price Trends, Deals & Stock Changes"
+          description="Weekly LEGO market intelligence: price movements, new releases, deal alerts, stock changes, and theme-by-theme analysis across 1,500+ sets."
+          path="/market-report"
+        />
         <div className="max-w-5xl mx-auto space-y-4">
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="glass rounded-xl p-6 animate-pulse">
@@ -154,6 +159,11 @@ export default function MarketReport() {
   if (error || !report) {
     return (
       <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
+        <SEO
+          title="LEGO Weekly Market Report"
+          description="Weekly LEGO market intelligence from StudMetrics."
+          path="/market-report"
+        />
         <div className="max-w-5xl mx-auto text-center py-20">
           <BarChart3 size={48} className="text-gray-600 mx-auto mb-4" />
           <h1 className="font-display font-bold text-2xl mb-2">Weekly Market Report</h1>
@@ -171,6 +181,11 @@ export default function MarketReport() {
 
   return (
     <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
+        <SEO
+        title={`LEGO Weekly Market Report — ${weekLabel}`}
+        description={`LEGO market report for ${weekLabel}: ${report.total_products?.toLocaleString()} sets tracked. New releases, deals, stock changes, and AI-powered market analysis.`}
+        path="/market-report"
+      />
       <div className="max-w-5xl mx-auto">
         {/* ── Header ── */}
         <ReportHeader report={report} weekLabel={weekLabel} />

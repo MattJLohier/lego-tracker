@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useMemo, useEffect } from 'react'
 import { getStatusDisplay, isStatusInStock, getStatusChartColor } from '../lib/stockStatus'
 import { trackProductView } from '../lib/analytics'
+import SEO from '../components/SEO'
 
 const TOOLTIP_STYLE = { background: '#16161F', border: '1px solid #2A2A3D', borderRadius: '8px', fontSize: '12px' }
 
@@ -16,6 +17,67 @@ function legoStoreUrl(product) {
   if (product.url) return product.url
   if (product.product_code) return `https://www.lego.com/en-us/product/${product.slug || product.product_code}`
   return null
+}
+
+function ProductSEO({ product, slug, priceStats }) {
+  const currentPrice = Number(product.price_usd)
+  const imageUrl = product._resolved_image_url || product.image_url || product.img_url || product.primary_image_url
+    || product.thumbnail_url || product.image || product.product_image_url || product.enriched_image_url || null
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: `LEGO ${product.product_name} (${product.product_code})`,
+    image: imageUrl,
+    description: `Price tracking and market data for LEGO ${product.product_name} — Set #${product.product_code}.${product.piece_count ? ` ${Number(product.piece_count).toLocaleString()} pieces.` : ''}${product.theme ? ` ${product.theme} theme.` : ''}`,
+    sku: product.product_code,
+    brand: {
+      '@type': 'Brand',
+      name: 'LEGO',
+    },
+    offers: {
+      '@type': 'AggregateOffer',
+      lowPrice: priceStats ? priceStats.min.toFixed(2) : currentPrice.toFixed(2),
+      highPrice: priceStats ? priceStats.max.toFixed(2) : currentPrice.toFixed(2),
+      priceCurrency: 'USD',
+      availability: product.in_stock
+        ? 'https://schema.org/InStock'
+        : 'https://schema.org/OutOfStock',
+      offerCount: 1,
+    },
+    ...(product.rating && {
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: Number(product.rating).toFixed(1),
+        bestRating: '5',
+        ratingCount: 1,
+      },
+    }),
+  }
+
+  const titleParts = [
+    `LEGO ${product.product_name}`,
+    product.product_code ? `(${product.product_code})` : '',
+    '— Price History & Deals',
+  ].filter(Boolean).join(' ')
+
+  const descParts = [
+    `Current price: $${currentPrice.toFixed(2)}.`,
+    `Track price history, get deal alerts, and compare market values for LEGO ${product.product_name} Set #${product.product_code}.`,
+    product.piece_count ? `${Number(product.piece_count).toLocaleString()} pieces.` : '',
+    product.theme ? `${product.theme} theme.` : '',
+  ].filter(Boolean).join(' ')
+
+  return (
+    <SEO
+      title={titleParts}
+      description={descParts}
+      path={`/product/${slug}`}
+      image={imageUrl || undefined}
+      type="product"
+      jsonLd={jsonLd}
+    />
+  )
 }
 
 export default function ProductDetail() {
@@ -71,6 +133,12 @@ export default function ProductDetail() {
 
   if (loading) return (
     <main className="pt-20 pb-16 px-6 min-h-screen">
+      <SEO
+        title="Loading set..."
+        description="Loading LEGO set details on StudMetrics."
+        path={`/product/${slug}`}
+        noindex={true}
+      />
       <div className="max-w-5xl mx-auto">
         <div className="animate-pulse space-y-6 pt-10">
           <div className="h-8 bg-lego-surface2 rounded w-1/3" />
@@ -85,6 +153,12 @@ export default function ProductDetail() {
 
   if (!product) return (
     <main className="pt-20 pb-16 px-6 min-h-screen flex items-center justify-center">
+      <SEO
+        title="Set Not Found"
+        description="This LEGO set could not be found on StudMetrics."
+        path={`/product/${slug}`}
+        noindex={true}
+      />
       <div className="text-center">
         <p className="text-gray-500 font-display text-lg mb-4">Product not found</p>
         <Link to="/explore" className="text-lego-red text-sm hover:underline">← Back to Explorer</Link>
@@ -121,6 +195,8 @@ export default function ProductDetail() {
 
   return (
     <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
+      <ProductSEO product={product} slug={slug} priceStats={priceStats} />
+
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <Link to="/explore" className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors">
@@ -139,7 +215,7 @@ export default function ProductDetail() {
           <div className="lg:col-span-2 space-y-4">
             <div className="glass rounded-xl aspect-square flex items-center justify-center relative overflow-hidden">
               {imageUrl ? (
-                <img src={imageUrl} alt={product_name || `Set ${product_code}`}
+                <img src={imageUrl} alt={`LEGO ${product_name || 'Set'} ${product_code} — ${theme || 'product'} box and pieces`}
                   className="max-h-full max-w-full object-contain drop-shadow-lg p-4"
                   onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; e.target.parentElement.querySelector('.fallback-code').style.display = 'block' }}
                 />

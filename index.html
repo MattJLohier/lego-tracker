@@ -2,16 +2,45 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/brick.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StudMetrics — LEGO Price Tracker & Analytics</title>
-    <meta name="description" content="Track every LEGO set. Monitor prices, availability, and discover the best deals across 1,500+ products." />
+
+    <!-- Default SEO (overridden per-page by React Helmet) -->
+    <title>StudMetrics — LEGO Price Tracker, Alerts & Market Intelligence</title>
+    <meta name="description" content="Track every LEGO set. Monitor prices, get deal alerts, compare market values, and discover investment opportunities across 1,500+ products." />
+    <link rel="canonical" href="https://studmetrics.com" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="StudMetrics" />
+    <meta property="og:title" content="StudMetrics — LEGO Price Tracker & Market Intelligence" />
+    <meta property="og:description" content="Track LEGO set prices, get deal alerts, and analyze market trends across 1,500+ sets." />
+    <meta property="og:image" content="https://studmetrics.com/og-image.png" />
+    <meta property="og:url" content="https://studmetrics.com" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="StudMetrics — LEGO Price Tracker" />
+    <meta name="twitter:description" content="Track LEGO prices, get alerts, analyze market trends." />
+    <meta name="twitter:image" content="https://studmetrics.com/og-image.png" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/brick.svg" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   </head>
   <body class="bg-lego-black text-white antialiased">
     <div id="root"></div>
+
+    <!-- Noscript fallback for crawlers that don't execute JS -->
+    <noscript>
+      <h1>StudMetrics — LEGO Price Tracker & Market Intelligence</h1>
+      <p>Track prices across 1,500+ LEGO sets. Get alerts on deals, compare market values, and discover investment-grade sets.</p>
+      <p>Enable JavaScript for the full experience.</p>
+    </noscript>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

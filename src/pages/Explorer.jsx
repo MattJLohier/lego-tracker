@@ -6,6 +6,7 @@ import { useProducts, useProductHistories, useThemeList, useAvailabilityStatuses
 import { useFavorites } from '../hooks/useFavorites'
 import { useAuth } from '../hooks/useAuth'
 import { trackSearch, trackFilterApplied } from '../lib/analytics'
+import SEO from '../components/SEO'
 
 const SORT_OPTIONS = [
   { value: 'price_usd-desc', label: 'Price: High → Low' },
@@ -113,6 +114,11 @@ export default function Explorer() {
 
   return (
     <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
+      <SEO
+        title="Explore LEGO Sets — Browse Prices by Theme, Year & Value"
+        description="Browse 1,500+ LEGO sets. Filter by theme, price range, piece count, rating, and availability. Find the best deals and track price trends on StudMetrics."
+        path="/explore"
+      />
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 flex items-start justify-between gap-3">
           <div>
