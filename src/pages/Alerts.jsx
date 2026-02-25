@@ -344,6 +344,19 @@ function NewAlertForm({ themes, userEmail, userId, isPro, onSubmit, onCancel }) 
   )
 }
 
+function _alertProductLink(alert) {
+  if (alert.slug) return `/product/${alert.slug}`
+  if (alert.product_name && alert.product_code) {
+    const slug = alert.product_name
+      .toLowerCase()
+      .replace(/[™®©']/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+    return `/product/${slug}-${alert.product_code}`
+  }
+  return '#'
+}
+
 function AlertHistoryTab() {
   const { history, loading } = useAlertSubscriptions()
   const { user } = useAuth()
@@ -351,32 +364,320 @@ function AlertHistoryTab() {
   if (loading) return <LoadingSkeleton />
   if (history.length === 0) return (<div className="glass rounded-xl p-10 text-center"><Clock size={36} className="text-gray-600 mx-auto mb-3" /><h3 className="font-display font-semibold text-sm text-gray-300 mb-1">No alerts fired yet</h3><p className="text-[11px] text-gray-500">Fired alerts will appear here.</p></div>)
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {history.map((alert, i) => {
-        const typeInfo = ALERT_TYPES.find(t => t.key === alert.alert_type); const TypeIcon = typeInfo?.icon || Bell
+        const typeInfo = ALERT_TYPES.find(t => t.key === alert.alert_type)
+        const TypeIcon = typeInfo?.icon || Bell
         const isProAlert = alert.details?.source === 'pro_poll'
+        const details = alert.details || {}
+
         return (
-          <div key={alert.id || i} className="glass rounded-lg p-3 hover:bg-white/[0.02] transition-colors">
-            <div className="flex items-start gap-3">
-              <div className="p-1.5 rounded-lg bg-white/5"><TypeIcon size={14} className={typeInfo?.color || 'text-gray-400'} /></div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-white font-medium">{alert.product_name || alert.slug || 'Catalog Alert'}</span>
-                  {isProAlert && (
-                    <span className="px-1.5 py-0.5 bg-amber-500/15 text-amber-400 text-[8px] font-bold rounded-full flex items-center gap-0.5">
-                      <Zap size={7} /> PRO
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10px] text-gray-500 mt-0.5">{typeInfo?.label || alert.alert_type}{alert.message && ` — ${alert.message}`}</div>
+          <Link key={alert.id || i} to={_alertProductLink(alert)} className="block glass rounded-xl overflow-hidden hover:bg-white/[0.03] transition-colors">
+            {/* Colored top accent */}
+            <div className={`h-0.5 ${
+              alert.alert_type === 'price_drop' ? 'bg-green-500' :
+              alert.alert_type === 'price_increase' ? 'bg-red-500' :
+              alert.alert_type === 'back_in_stock' ? 'bg-blue-500' :
+              alert.alert_type === 'out_of_stock' ? 'bg-orange-500' :
+              alert.alert_type === 'new_deal' ? 'bg-lego-yellow' :
+              alert.alert_type === 'backorder_change' ? 'bg-purple-500' :
+              alert.alert_type === 'retirement_risk' ? 'bg-red-500' :
+              'bg-gray-600'
+            }`} />
+
+            <div className="p-3 text-center">
+              {/* Icon */}
+              <div className={`inline-flex items-center justify-center w-7 h-7 rounded-xl mb-3 ${
+                alert.alert_type === 'price_drop' ? 'bg-green-500/10' :
+                alert.alert_type === 'price_increase' ? 'bg-red-500/10' :
+                alert.alert_type === 'back_in_stock' ? 'bg-blue-500/10' :
+                alert.alert_type === 'out_of_stock' ? 'bg-orange-500/10' :
+                alert.alert_type === 'new_deal' ? 'bg-yellow-500/10' :
+                alert.alert_type === 'backorder_change' ? 'bg-purple-500/10' :
+                alert.alert_type === 'retirement_risk' ? 'bg-red-500/10' :
+                'bg-white/5'
+              }`}>
+                <TypeIcon size={14} className={typeInfo?.color || 'text-gray-400'} />
               </div>
-              <div className="text-[10px] text-gray-600 shrink-0">{fmtTime(alert.fired_at || alert.created_at)}</div>
+
+              {/* Type label */}
+              <div className={`text-9px] font-bold uppercase tracking-widest mb-1 ${typeInfo?.color || 'text-gray-400'}`}>
+                {typeInfo?.label || alert.alert_type}
+              </div>
+
+              {/* Product name */}
+              <div className="text-sm text-white font-bold mb-0.5">
+                {alert.product_name || alert.slug || 'Catalog Alert'}
+              </div>
+
+              {/* Product code */}
+              {alert.product_code && (
+                <div className="text-[11px] text-gray-500 font-mono mb-3">
+                  {alert.product_code}
+                </div>
+              )}
+
+              {/* Detail box — matches email colored box */}
+              <AlertDetailBox type={alert.alert_type} details={details} />
+
+              {/* Footer: timestamp + pro badge */}
+              <div className="flex items-center justify-center gap-2 mt-3">
+                {isProAlert && (
+                  <span className="px-1.5 py-0.5 bg-amber-500/15 text-amber-400 text-[8px] font-bold rounded-full flex items-center gap-0.5">
+                    <Zap size={7} /> PRO
+                  </span>
+                )}
+                <span className="text-[10px] text-gray-600">{fmtTime(alert.fired_at || alert.created_at)}</span>
+              </div>
             </div>
-          </div>
+          </Link>
         )
       })}
     </div>
   )
+}
+
+function AlertDetailBox({ type, details }) {
+  if (!details || Object.keys(details).length === 0) return null
+
+  let text = ''
+  let colorClass = 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+
+  if ((type === 'price_drop' || type === 'price_increase') && details.old_price != null) {
+    const pct = details.change_pct != null ? Number(details.change_pct).toFixed(1) : null
+    text = `$${Number(details.old_price).toFixed(2)} → $${Number(details.new_price).toFixed(2)}`
+    if (pct) text += ` (${Number(details.change_pct) > 0 ? '+' : ''}${pct}%)`
+    colorClass = type === 'price_drop'
+      ? 'text-green-400 bg-green-500/10 border-green-500/20'
+      : 'text-red-400 bg-red-500/10 border-red-500/20'
+  }
+
+  else if ((type === 'back_in_stock' || type === 'out_of_stock') && (details.status || details.previous)) {
+    const prev = _normalizeStatusLabel(details.previous || 'Unknown')
+    const curr = _normalizeStatusLabel(details.status || 'Unknown')
+    text = `${prev} → ${curr}`
+    colorClass = type === 'back_in_stock'
+      ? 'text-green-400 bg-green-500/10 border-green-500/20'
+      : 'text-orange-400 bg-orange-500/10 border-orange-500/20'
+  }
+
+  else if (type === 'backorder_change') {
+    const prev = _normalizeBackorderLabel(details.previous_status, details.previous_text)
+    const curr = _normalizeBackorderLabel(details.current_status, details.current_text)
+    text = `${prev} → ${curr}`
+    colorClass = 'text-purple-400 bg-purple-500/10 border-purple-500/20'
+  }
+
+  else if (type === 'new_deal' || type === 'sale_started') {
+    const parts = []
+    if (details.price != null) parts.push(`$${Number(details.price).toFixed(2)}`)
+    if (details.was_price != null) parts.push(`was $${Number(details.was_price).toFixed(2)}`)
+    if (details.discount != null && details.discount > 0) parts.push(`${Number(details.discount).toFixed(0)}% off`)
+    text = parts.join(' — ')
+    if (details.is_all_time_low) text += ' ★ All-time low'
+    colorClass = 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+  }
+
+  else if (type === 'sale_ended') {
+    text = details.price != null ? `Back to $${Number(details.price).toFixed(2)}` : 'Sale has ended'
+    colorClass = 'text-gray-400 bg-gray-500/10 border-gray-500/20'
+  }
+
+  else if (type === 'retirement_risk' && details.score != null) {
+    text = `Risk score: ${details.score}/100 — ${(details.level || 'High').charAt(0).toUpperCase() + (details.level || 'high').slice(1)}`
+    colorClass = details.score >= 80
+      ? 'text-red-400 bg-red-500/10 border-red-500/20'
+      : details.score >= 50
+        ? 'text-orange-400 bg-orange-500/10 border-orange-500/20'
+        : 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
+  }
+
+  else if (type === 'new_product') {
+    const parts = []
+    if (details.price != null) parts.push(`$${Number(details.price).toFixed(2)}`)
+    if (details.pieces != null) parts.push(`${details.pieces} pieces`)
+    text = parts.join(' • ') || 'New product detected'
+    colorClass = 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+  }
+
+  if (!text) return null
+
+  return (
+    <div className={`inline-block px-4 py-1.5 rounded-lg border text-sm font-semibold ${colorClass}`}>
+      {text}
+    </div>
+  )
+}
+
+// ─── Status label helpers (mirrors templates.py logic) ───
+
+function _normalizeStatusLabel(raw) {
+  if (!raw) return 'Unknown'
+  const lower = raw.toLowerCase().trim()
+  const map = {
+    'e_available': 'In Stock',
+    'available': 'In Stock',
+    'in stock': 'In Stock',
+    'in_stock': 'In Stock',
+    'g_backorder': 'Backorder',
+    'f_backorder_for_date': 'Backorder (Dated)',
+    'backorder': 'Backorder',
+    'h_out_of_stock': 'Out of Stock',
+    'out_of_stock': 'Out of Stock',
+    'out of stock': 'Out of Stock',
+    'k_sold_out': 'Sold Out',
+    'sold_out': 'Sold Out',
+    'r_retired': 'Retired',
+    'a_pre_order_for_date': 'Pre-Order',
+    'b_coming_soon_at_date': 'Coming Soon',
+  }
+  return map[lower] || raw
+}
+
+function _normalizeBackorderLabel(status, availText) {
+  if (!status && !availText) return 'Unknown'
+  const label = _normalizeStatusLabel(status || '')
+
+  // Only enrich "Backorder (Dated)" with the ship date — matches email logic
+  if (label === 'Backorder (Dated)' && availText) {
+    const text = availText.trim()
+    if (text.toLowerCase().startsWith('will ship by ')) {
+      const shipDate = text.slice('Will ship by '.length)
+      return `Backorder (${shipDate})`
+    }
+  }
+
+  return label
+}
+
+function AlertDetailBlock({ type, details }) {
+  if (!details || Object.keys(details).length === 0) return null
+
+  // Price drop / increase
+  if ((type === 'price_drop' || type === 'price_increase') && details.old_price != null) {
+    const isPriceDrop = type === 'price_drop'
+    const changePct = details.change_pct != null ? Math.abs(details.change_pct).toFixed(1) : null
+    return (
+      <div className="mt-2 flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-gray-500 line-through">${Number(details.old_price).toFixed(2)}</span>
+          <span className="text-[11px] text-gray-400">→</span>
+          <span className={`text-[11px] font-bold ${isPriceDrop ? 'text-green-400' : 'text-red-400'}`}>
+            ${Number(details.new_price).toFixed(2)}
+          </span>
+        </div>
+        {changePct && (
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+            isPriceDrop ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+          }`}>
+            {isPriceDrop ? '↓' : '↑'} {changePct}%
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // Back in stock / Out of stock
+  if ((type === 'back_in_stock' || type === 'out_of_stock') && (details.status || details.previous)) {
+    return (
+      <div className="mt-2 flex items-center gap-1.5">
+        <span className="text-[10px] text-gray-500">{details.previous || 'Unknown'}</span>
+        <span className="text-[10px] text-gray-600">→</span>
+        <span className={`text-[10px] font-semibold ${type === 'back_in_stock' ? 'text-green-400' : 'text-orange-400'}`}>
+          {details.status || 'Unknown'}
+        </span>
+      </div>
+    )
+  }
+
+  // Backorder change
+  if (type === 'backorder_change') {
+    const prevLabel = details.previous_text || details.previous_status || 'Unknown'
+    const currLabel = details.current_text || details.current_status || 'Unknown'
+    return (
+      <div className="mt-2 space-y-1.5">
+        <div className="flex items-start gap-1.5">
+          <span className="text-[10px] text-gray-500 shrink-0 mt-px">Status:</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-gray-400">{prevLabel}</span>
+            <span className="text-[10px] text-gray-600">→</span>
+            <span className="text-[10px] text-purple-400 font-semibold">{currLabel}</span>
+          </div>
+        </div>
+        {details.price != null && (
+          <div className="text-[10px] text-gray-500">
+            Price: <span className="text-white font-medium">${Number(details.price).toFixed(2)}</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // New deal / sale
+  if (type === 'new_deal' || type === 'sale_started') {
+    return (
+      <div className="mt-2 flex items-center gap-3 flex-wrap">
+        {details.was_price != null && details.price != null && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-gray-500 line-through">${Number(details.was_price).toFixed(2)}</span>
+            <span className="text-[11px] text-gray-400">→</span>
+            <span className="text-[11px] text-lego-yellow font-bold">${Number(details.price).toFixed(2)}</span>
+          </div>
+        )}
+        {details.discount != null && details.discount > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-lego-yellow/10 text-lego-yellow text-[9px] font-bold">
+            {Number(details.discount).toFixed(0)}% off
+          </span>
+        )}
+        {details.is_all_time_low && (
+          <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 text-[9px] font-bold">
+            ★ All-time low
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // Sale ended
+  if (type === 'sale_ended') {
+    return (
+      <div className="mt-2 text-[10px] text-gray-500">
+        Sale has ended{details.price != null && <> · Current price: <span className="text-white font-medium">${Number(details.price).toFixed(2)}</span></>}
+      </div>
+    )
+  }
+
+  // Retirement risk
+  if (type === 'retirement_risk' && details.score != null) {
+    const scoreColor = details.score >= 80 ? 'text-red-400' : details.score >= 50 ? 'text-orange-400' : 'text-yellow-400'
+    return (
+      <div className="mt-2 flex items-center gap-2">
+        <span className="text-[10px] text-gray-500">Risk score:</span>
+        <span className={`text-[11px] font-bold ${scoreColor}`}>{details.score}/100</span>
+        {details.level && (
+          <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+            details.level === 'high' ? 'bg-red-500/10 text-red-400' :
+            details.level === 'medium' ? 'bg-orange-500/10 text-orange-400' :
+            'bg-yellow-500/10 text-yellow-400'
+          }`}>
+            {details.level}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // New product
+  if (type === 'new_product') {
+    return (
+      <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-500">
+        {details.price != null && <span>Price: <span className="text-white font-medium">${Number(details.price).toFixed(2)}</span></span>}
+        {details.pieces != null && <span>{details.pieces} pieces</span>}
+      </div>
+    )
+  }
+
+  return null
 }
 
 function LoadingSkeleton() { return (<div className="space-y-5">{[1, 2, 3].map(i => (<div key={i} className="glass rounded-xl p-5 animate-pulse"><div className="h-4 bg-lego-surface2 rounded w-48 mb-2" /><div className="h-3 bg-lego-surface2 rounded w-32 mb-4" /><div className="h-[200px] bg-lego-surface2 rounded" /></div>))}</div>) }
