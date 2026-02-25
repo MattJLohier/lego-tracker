@@ -15,7 +15,6 @@ const PRO_FEATURES = [
   { icon: FileText, label: '10 Automated Reports', free: '1 report' },
   { icon: Layers, label: 'Custom Analytics Builder', free: 'View only' },
   { icon: Sparkles, label: 'Save Unlimited Dashboards', free: 'Not available' },
-  { icon: GitCompareArrows, label: 'Unlimited Comparisons', free: '2 items' },
 ]
 
 // Small helper to tailor the modal copy when user is upgrading from Alerts
