@@ -15,7 +15,6 @@ const PRO_FEATURES = [
   { icon: FileText, label: '10 Automated Reports', free: '1 report' },
   { icon: Layers, label: 'Custom Analytics Builder', free: 'View only' },
   { icon: Sparkles, label: 'Save Unlimited Dashboards', free: 'Not available' },
-  { icon: Heart, label: 'Unlimited Watchlist', free: '5 items' },
   { icon: GitCompareArrows, label: 'Unlimited Comparisons', free: '2 items' },
 ]
 
