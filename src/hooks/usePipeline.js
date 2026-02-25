@@ -26,8 +26,14 @@ export function useAlertSubscriptions() {
     if (subs !== null) {
       setApiAvailable(true)
       setSubscriptions(Array.isArray(subs) ? subs : subs?.subscriptions || [])
-      const hist = await api.getAlertHistory(50, user.email)
-      setHistory(Array.isArray(hist) ? hist : hist?.history || [])
+        
+      const { data: hist } = await supabase
+        .from('alert_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('fired_at', { ascending: false })
+        .limit(50)
+      setHistory(hist || [])
     } else {
       // Fallback: try Supabase direct — scoped to user email
       setApiAvailable(false)
