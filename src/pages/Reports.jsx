@@ -4,7 +4,7 @@ import {
   FileText, Plus, Trash2, Mail, Clock, Send, Zap, TrendingDown,
   ShoppingBag, Sparkles, AlertTriangle, Tag, BarChart3, X, Check,
   Power, RefreshCw, Calendar, Activity, Filter, Crown, Eye, ChevronDown,
-  ChevronUp, Settings, Bell, CheckCircle, AlertCircle, Loader2
+  ChevronUp, Settings, Bell, CheckCircle, Download, AlertCircle, Loader2
 } from 'lucide-react'
 import { useReportProfiles } from '../hooks/usePipeline'
 import { useAuth } from '../hooks/useAuth'
@@ -942,6 +942,40 @@ function FrequencyBar({ label, count, total, color }) {
 /* ─── Report Preview Tab (used for both profile preview & history view) ─── */
 
 function ReportPreviewTab({ html, label, onClose }) {
+  const [downloading, setDownloading] = useState(null) // null | 'png' | 'pdf'
+   const [showDlMenu, setShowDlMenu] = useState(false)
+
+   const handleDownload = async (format) => {
+     setShowDlMenu(false)
+     setDownloading(format)
+     try {
+       const iframe = document.querySelector('iframe[title="Report Preview"]')
+       const iframeDoc = iframe.contentDocument || iframe.contentWindow.document
+       const slug = label.replace(/\s+/g, '_')
+       const { toPng } = await import('html-to-image')
+       const dataUrl = await toPng(iframeDoc.body, {
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+       })
+       if (format === 'png') {
+         const a = document.createElement('a')
+         a.download = `${slug}_report.png`
+         a.href = dataUrl
+         a.click()
+       } else {
+         const { default: jsPDF } = await import('jspdf')
+         const img = new Image()
+         img.src = dataUrl
+         await new Promise(r => img.onload = r)
+         const w = img.naturalWidth / 2
+         const h = img.naturalHeight / 2
+         const pdf = new jsPDF({ unit: 'px', format: [w, h] })
+         pdf.addImage(dataUrl, 'PNG', 0, 0, w, h)
+         pdf.save(`${slug}_report.pdf`)
+       }
+     } catch (e) { console.error('Download failed', e) }
+     finally { setDownloading(null) }
+   }
   if (!html) {
     return (
       <div className="glass rounded-xl p-10 text-center">
@@ -971,7 +1005,41 @@ function ReportPreviewTab({ html, label, onClose }) {
           <span className="text-xs text-gray-400 font-mono">{label}</span>
           <span className="px-2 py-0.5 bg-lego-yellow/15 text-lego-yellow text-[9px] font-bold rounded-full uppercase">Preview</span>
         </div>
-        <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors"><X size={14} /></button>
+        <div className="relative">
+          <div className="flex items-center rounded-lg overflow-hidden border border-lego-yellow/20 bg-lego-yellow/10">
+            <button
+              onClick={() => handleDownload('png')}
+              disabled={!!downloading}
+              className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-lego-yellow/10 text-lego-yellow text-[10px] font-semibold transition-colors disabled:opacity-50"
+            >
+              {downloading ? (
+                <span className="animate-spin w-3 h-3 border-2 border-lego-yellow/30 border-t-lego-yellow rounded-full" />
+              ) : (
+                <Download size={11} />
+              )}
+              {downloading ? `Saving ${downloading.toUpperCase()}…` : 'Save PNG'}
+            </button>
+            <div className="w-px self-stretch bg-lego-yellow/20" />
+            <button
+              onClick={() => setShowDlMenu(v => !v)}
+              disabled={!!downloading}
+              className="px-2 py-1.5 hover:bg-lego-yellow/10 text-lego-yellow transition-colors disabled:opacity-50"
+            >
+              <ChevronDown size={11} />
+            </button>
+          </div>
+
+          {showDlMenu && (
+            <div className="absolute right-0 top-full mt-1 glass border border-lego-border/50 rounded-lg overflow-hidden z-10 min-w-[120px] shadow-xl">
+              <button onClick={() => handleDownload('png')} className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-gray-300 hover:bg-white/5 hover:text-lego-yellow transition-colors">
+                <Download size={11} /> Save as PNG
+              </button>
+              <button onClick={() => handleDownload('pdf')} className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-gray-300 hover:bg-white/5 hover:text-lego-yellow transition-colors border-t border-lego-border/30">
+                <FileText size={11} /> Save as PDF
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <iframe srcDoc={html} className="w-full bg-white" style={{ minHeight: '700px', border: 'none' }} title="Report Preview" />
       <div className="p-3 border-t border-lego-border/50 bg-white/[0.02]">
