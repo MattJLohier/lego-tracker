@@ -1,10 +1,10 @@
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Heart, Star, Package, Tag, Clock, TrendingDown, TrendingUp, ShoppingBag, CalendarDays, ExternalLink, Minus, BarChart3 } from 'lucide-react'
-import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, BarChart, Bar, Cell } from 'recharts'
-import { useProductDetail } from '../hooks/useData'
+import { ArrowLeft, Heart, Star, Package, Tag, Clock, TrendingDown, TrendingUp, ShoppingBag, CalendarDays, ExternalLink, Minus, BarChart3, Store, ChevronDown, ChevronUp, CheckCircle2, XCircle, Truck, AlertTriangle } from 'lucide-react'
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, BarChart, Bar, Cell, LineChart, Line, Legend } from 'recharts'
+import { useProductDetail, RETAILER_CONFIG } from '../hooks/useData'
 import { useFavorites } from '../hooks/useFavorites'
 import { useAuth } from '../hooks/useAuth'
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { getStatusDisplay, isStatusInStock, getStatusChartColor } from '../lib/stockStatus'
 import { trackProductView } from '../lib/analytics'
 import SEO from '../components/SEO'
@@ -80,11 +80,84 @@ function ProductSEO({ product, slug, priceStats }) {
   )
 }
 
+// ── Helper: normalize a retailer price row to { date, price } ──
+function normalizeRetailerPrice(source, row) {
+  switch (source) {
+    case 'bestbuy': return { date: row.scraped_date, price: Number(row.sale_price) || null }
+    case 'amazon':  return { date: row.scraped_date, price: Number(row.price) || null }
+    case 'target':  return { date: row.scraped_date, price: Number(row.sale_price) || null }
+    default:        return { date: row.scraped_date, price: null }
+  }
+}
+
+// ── Helper: get latest row from a retailer history array ──
+function getLatestRetailer(source, rows) {
+  if (!rows || rows.length === 0) return null
+  const latest = rows[rows.length - 1]
+  switch (source) {
+    case 'bestbuy': return {
+      source: 'bestbuy',
+      name: latest.product_name,
+      price: Number(latest.sale_price) || null,
+      regularPrice: Number(latest.regular_price) || null,
+      onSale: latest.on_sale,
+      salePct: Number(latest.percent_savings) || null,
+      available: latest.online_available,
+      inStore: latest.in_store_available,
+      freeShipping: latest.free_shipping,
+      reviewAvg: Number(latest.review_avg) || null,
+      reviewCount: Number(latest.review_count) || 0,
+      url: latest.product_url,
+      date: latest.scraped_date,
+      dataPoints: rows.length,
+    }
+    case 'amazon': return {
+      source: 'amazon',
+      name: latest.product_name,
+      price: Number(latest.price) || null,
+      regularPrice: null,
+      onSale: false,
+      salePct: null,
+      available: latest.price > 0,
+      inStore: null,
+      freeShipping: null,
+      reviewAvg: Number(latest.review_avg) || null,
+      reviewCount: Number(latest.review_count) || 0,
+      url: latest.product_url,
+      date: latest.scraped_date,
+      dataPoints: rows.length,
+    }
+    case 'target': return {
+      source: 'target',
+      name: latest.product_name,
+      price: Number(latest.sale_price) || null,
+      regularPrice: Number(latest.regular_price) || null,
+      onSale: latest.on_sale,
+      salePct: Number(latest.percent_savings) || null,
+      available: true, // Target doesn't give us stock boolean; presence = available
+      inStore: null,
+      freeShipping: latest.free_shipping,
+      reviewAvg: Number(latest.review_avg) || null,
+      reviewCount: Number(latest.review_count) || 0,
+      url: latest.product_url,
+      date: latest.scraped_date,
+      dataPoints: rows.length,
+    }
+    default: return null
+  }
+}
+
+
 export default function ProductDetail() {
   const { slug } = useParams()
-  const { product, history, loading } = useProductDetail(slug)
+  const { product, history, loading, retailerPrices, retailerHistory, retailerLoading } = useProductDetail(slug)
   const { user } = useAuth()
   const { isFavorite, toggleFavorite } = useFavorites()
+  const [showAllRetailers, setShowAllRetailers] = useState(false)
+
+  // ── Which retailer lines to show on chart ──
+  const [enabledLines, setEnabledLines] = useState({ lego: true, bestbuy: true, amazon: true, target: true })
+  const toggleLine = (key) => setEnabledLines(prev => ({ ...prev, [key]: !prev[key] }))
 
   const priceStats = useMemo(() => {
     const prices = history.filter(h => h.price_usd).map(h => Number(h.price_usd))
@@ -118,11 +191,139 @@ export default function ProductDetail() {
       return {
         date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
         status: statusInfo.displayLabel,
-        inStock: 1, // Always 1 so the bar renders; color conveys the status
+        inStock: 1,
         color: statusInfo.color,
       }
     })
   }, [history])
+
+  // ── Build unified multi-source chart data ──
+  const multiSourceChartData = useMemo(() => {
+    // Collect all dates across all sources
+    const dateMap = new Map() // date string → { lego, bestbuy, amazon, target }
+
+    // LEGO.com data
+    for (const h of history) {
+      const dateKey = h.scraped_date
+      if (!dateMap.has(dateKey)) dateMap.set(dateKey, {})
+      dateMap.get(dateKey).lego = Number(h.price_usd) || null
+    }
+
+    // Retailer data
+    for (const [source, rows] of Object.entries(retailerHistory)) {
+      for (const row of rows) {
+        const dateKey = row.scraped_date
+        if (!dateMap.has(dateKey)) dateMap.set(dateKey, {})
+        const normalized = normalizeRetailerPrice(source, row)
+        dateMap.get(dateKey)[source] = normalized.price
+      }
+    }
+
+    // Sort by date and format
+    return Array.from(dateMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([dateKey, prices]) => ({
+        date: new Date(dateKey).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+        rawDate: dateKey,
+        lego: prices.lego ?? null,
+        bestbuy: prices.bestbuy ?? null,
+        amazon: prices.amazon ?? null,
+        target: prices.target ?? null,
+      }))
+  }, [history, retailerHistory])
+
+  // ── Which sources actually have data for the chart ──
+  const activeSources = useMemo(() => {
+    const sources = ['lego']
+    for (const s of ['bestbuy', 'amazon', 'target']) {
+      if (retailerHistory[s]?.length > 0) sources.push(s)
+    }
+    return sources
+  }, [retailerHistory])
+
+  // ── Get all-source price range for chart Y axis ──
+  const allSourcePriceStats = useMemo(() => {
+    const allPrices = multiSourceChartData.flatMap(d =>
+      [d.lego, d.bestbuy, d.amazon, d.target].filter(p => p != null && p > 0)
+    )
+    if (allPrices.length === 0) return null
+    return {
+      min: Math.min(...allPrices),
+      max: Math.max(...allPrices),
+      dataPoints: multiSourceChartData.length,
+    }
+  }, [multiSourceChartData])
+
+  // ── Retailer summary cards ──
+  const retailerCards = useMemo(() => {
+    const cards = []
+    for (const [source, rows] of Object.entries(retailerHistory)) {
+      const info = getLatestRetailer(source, rows)
+      if (info) cards.push(info)
+    }
+    // Sort: cheapest first
+    cards.sort((a, b) => (a.price || 999999) - (b.price || 999999))
+    return cards
+  }, [retailerHistory])
+
+  // ── Best price across all sources ──
+  const bestPrice = useMemo(() => {
+    const currentLego = Number(product?.price_usd) || 999999
+    const candidates = [{ source: 'lego', price: currentLego }]
+    for (const card of retailerCards) {
+      if (card.price) candidates.push({ source: card.source, price: card.price })
+    }
+    candidates.sort((a, b) => a.price - b.price)
+    return candidates[0] || null
+  }, [product, retailerCards])
+
+  // ── Retailer stock chart data (multi-source) ──
+  const retailerStockChartData = useMemo(() => {
+    // Build date-indexed availability per source
+    const dateMap = new Map()
+
+    // LEGO.com
+    for (const h of history) {
+      const dateKey = h.scraped_date
+      if (!dateMap.has(dateKey)) dateMap.set(dateKey, {})
+      dateMap.get(dateKey).lego = h.in_stock
+    }
+
+    // Best Buy
+    if (retailerHistory.bestbuy) {
+      for (const row of retailerHistory.bestbuy) {
+        const dateKey = row.scraped_date
+        if (!dateMap.has(dateKey)) dateMap.set(dateKey, {})
+        dateMap.get(dateKey).bestbuy = row.online_available
+      }
+    }
+
+    // Amazon (available if price > 0)
+    if (retailerHistory.amazon) {
+      for (const row of retailerHistory.amazon) {
+        const dateKey = row.scraped_date
+        if (!dateMap.has(dateKey)) dateMap.set(dateKey, {})
+        dateMap.get(dateKey).amazon = Number(row.price) > 0
+      }
+    }
+
+    // Target (present = available)
+    if (retailerHistory.target) {
+      for (const row of retailerHistory.target) {
+        const dateKey = row.scraped_date
+        if (!dateMap.has(dateKey)) dateMap.set(dateKey, {})
+        dateMap.get(dateKey).target = true
+      }
+    }
+
+    return Array.from(dateMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([dateKey, avail]) => ({
+        date: new Date(dateKey).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+        rawDate: dateKey,
+        ...avail,
+      }))
+  }, [history, retailerHistory])
 
   // Track product view — must be before any early returns to satisfy Rules of Hooks
   useEffect(() => {
@@ -187,7 +388,8 @@ export default function ProductDetail() {
   const priceChange = currentPrice - firstPrice
   const priceChangePct = firstPrice > 0 ? ((priceChange / firstPrice) * 100).toFixed(1) : 0
 
-  const chartData = history.map(h => ({
+  const hasMultipleSources = activeSources.length > 1
+  const chartData = hasMultipleSources ? multiSourceChartData : history.map(h => ({
     date: new Date(h.scraped_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
     price: Number(h.price_usd),
     inStock: h.in_stock,
@@ -284,6 +486,59 @@ export default function ProductDetail() {
                 </div>
               </div>
             )}
+
+            {/* ── Retailer Price Cards (left sidebar) ── */}
+            {retailerCards.length > 0 && (
+              <div className="glass rounded-xl p-4">
+                <h3 className="font-display font-semibold text-xs mb-3 flex items-center gap-1.5">
+                  <Store size={13} className="text-lego-blue" /> Where to Buy
+                </h3>
+
+                {/* Best price banner */}
+                {bestPrice && (
+                  <div className="mb-3 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <div className="text-[9px] font-mono text-green-400 uppercase tracking-wider mb-0.5">Best Price</div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-lg font-bold text-green-400">${bestPrice.price.toFixed(2)}</span>
+                      <span className="text-[10px] text-gray-400">at {RETAILER_CONFIG[bestPrice.source]?.label}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {/* Always show LEGO.com */}
+                  <RetailerCard
+                    source="lego"
+                    price={currentPrice}
+                    regularPrice={Number(list_price_usd) || null}
+                    onSale={on_sale}
+                    available={in_stock}
+                    url={storeUrl}
+                    reviewAvg={rating ? Number(rating) : null}
+                    isBest={bestPrice?.source === 'lego'}
+                    date={scraped_date}
+                  />
+                  {/* Other retailers */}
+                  {retailerCards.map(card => (
+                    <RetailerCard
+                      key={card.source}
+                      source={card.source}
+                      price={card.price}
+                      regularPrice={card.regularPrice}
+                      onSale={card.onSale}
+                      salePct={card.salePct}
+                      available={card.available}
+                      freeShipping={card.freeShipping}
+                      url={card.url}
+                      reviewAvg={card.reviewAvg}
+                      reviewCount={card.reviewCount}
+                      isBest={bestPrice?.source === card.source}
+                      date={card.date}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right: details */}
@@ -307,6 +562,12 @@ export default function ProductDetail() {
                 <span className="font-display font-bold text-3xl text-lego-yellow">${currentPrice.toFixed(2)}</span>
                 {hasDiscount && <span className="text-base text-gray-500 line-through">${Number(list_price_usd).toFixed(2)}</span>}
                 {hasDiscount && <span className="px-2 py-0.5 bg-lego-red/20 text-lego-red text-xs font-bold rounded-full">−{Number(sale_percentage).toFixed(0)}%</span>}
+                {/* Source count badge */}
+                {retailerCards.length > 0 && (
+                  <span className="px-2 py-0.5 bg-lego-surface2 text-gray-400 text-[10px] font-mono rounded-full">
+                    {retailerCards.length + 1} sources
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <InfoItem icon={<Package size={14} />} label="Pieces" value={piece_count ? Number(piece_count).toLocaleString() : '—'} />
@@ -334,43 +595,134 @@ export default function ProductDetail() {
               </div>
             )}
 
-            {/* Price history chart */}
+            {/* ══════════════════════════════════════════════════════════
+                PRICE HISTORY CHART — multi-source when retailers exist
+               ══════════════════════════════════════════════════════════ */}
             {chartData.length > 1 && (
               <div className="glass rounded-xl p-5">
-                <h3 className="font-display font-semibold text-sm mb-1">Price History</h3>
-                <p className="text-[10px] text-gray-500 mb-4">
-                  {chartData.length} data points tracked
-                  {priceStats && ` · Range: $${priceStats.min.toFixed(2)} – $${priceStats.max.toFixed(2)}`}
-                </p>
-                <div className="h-[250px]">
+                <div className="flex items-start justify-between mb-1">
+                  <div>
+                    <h3 className="font-display font-semibold text-sm">Price History</h3>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {hasMultipleSources
+                        ? `${multiSourceChartData.length} data points · ${activeSources.length} sources tracked`
+                        : `${chartData.length} data points tracked`}
+                      {priceStats && ` · Range: $${(allSourcePriceStats || priceStats).min.toFixed(2)} – $${(allSourcePriceStats || priceStats).max.toFixed(2)}`}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Source toggle pills (only when multiple sources) */}
+                {hasMultipleSources && (
+                  <div className="flex flex-wrap gap-1.5 mb-4 mt-2">
+                    {activeSources.map(source => {
+                      const cfg = RETAILER_CONFIG[source]
+                      const enabled = enabledLines[source]
+                      return (
+                        <button
+                          key={source}
+                          onClick={() => toggleLine(source)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all border ${
+                            enabled
+                              ? 'border-transparent'
+                              : 'border-lego-border opacity-40 bg-transparent'
+                          }`}
+                          style={enabled ? { backgroundColor: cfg.color + '20', color: cfg.color, borderColor: cfg.color + '40' } : {}}
+                        >
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: enabled ? cfg.color : '#555' }} />
+                          {cfg.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#FFD500" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#FFD500" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2A" />
-                      <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 10 }} />
-                      <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${v}`} domain={['dataMin - 5', 'dataMax + 5']} />
-                      <Tooltip contentStyle={TOOLTIP_STYLE}
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.[0]) return null
-                          const d = payload[0].payload
-                          return (
-                            <div className="glass rounded-lg p-3 border border-lego-border text-xs">
-                              <div className="text-white font-semibold mb-1">{d.date}</div>
-                              <div className="text-lego-yellow font-bold">${d.price.toFixed(2)}</div>
-                              <div className={`text-[10px] ${d.inStock ? 'text-green-400' : 'text-red-400'}`}>
-                                {d.inStock ? '● In Stock' : '● Out of Stock'}
+                    {hasMultipleSources ? (
+                      /* ── Multi-source line chart ── */
+                      <LineChart data={multiSourceChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2A" />
+                        <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 10 }} />
+                        <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${v}`}
+                          domain={[
+                            (allSourcePriceStats?.min || 0) * 0.95,
+                            (allSourcePriceStats?.max || 100) * 1.05
+                          ]}
+                        />
+                        <Tooltip
+                          content={({ active, payload, label }) => {
+                            if (!active || !payload?.length) return null
+                            return (
+                              <div className="glass rounded-lg p-3 border border-lego-border text-xs min-w-[160px]">
+                                <div className="text-white font-semibold mb-2">{label}</div>
+                                {payload
+                                  .filter(p => p.value != null)
+                                  .sort((a, b) => a.value - b.value)
+                                  .map(p => {
+                                    const cfg = RETAILER_CONFIG[p.dataKey]
+                                    return (
+                                      <div key={p.dataKey} className="flex items-center justify-between gap-3 py-0.5">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cfg?.color }} />
+                                          <span className="text-gray-400">{cfg?.label}</span>
+                                        </div>
+                                        <span className="font-bold" style={{ color: cfg?.color }}>${p.value.toFixed(2)}</span>
+                                      </div>
+                                    )
+                                  })}
                               </div>
-                            </div>
+                            )
+                          }}
+                        />
+                        {activeSources.map(source => {
+                          const cfg = RETAILER_CONFIG[source]
+                          if (!enabledLines[source]) return null
+                          return (
+                            <Line
+                              key={source}
+                              type="monotone"
+                              dataKey={source}
+                              stroke={cfg.stroke}
+                              strokeWidth={source === 'lego' ? 2.5 : 1.8}
+                              dot={{ fill: cfg.color, r: 2.5, strokeWidth: 0 }}
+                              activeDot={{ r: 5, strokeWidth: 2, stroke: '#16161F' }}
+                              connectNulls={true}
+                              strokeDasharray={source === 'lego' ? undefined : undefined}
+                            />
                           )
-                        }}
-                      />
-                      <Area type="monotone" dataKey="price" stroke="#FFD500" fill="url(#priceGrad)" strokeWidth={2} dot={{ fill: '#FFD500', r: 3 }} activeDot={{ r: 5 }} />
-                    </AreaChart>
+                        })}
+                      </LineChart>
+                    ) : (
+                      /* ── Single-source area chart (original) ── */
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#FFD500" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#FFD500" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2A" />
+                        <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 10 }} />
+                        <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${v}`} domain={['dataMin - 5', 'dataMax + 5']} />
+                        <Tooltip contentStyle={TOOLTIP_STYLE}
+                          content={({ active, payload }) => {
+                            if (!active || !payload?.[0]) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="glass rounded-lg p-3 border border-lego-border text-xs">
+                                <div className="text-white font-semibold mb-1">{d.date}</div>
+                                <div className="text-lego-yellow font-bold">${d.price.toFixed(2)}</div>
+                                <div className={`text-[10px] ${d.inStock ? 'text-green-400' : 'text-red-400'}`}>
+                                  {d.inStock ? '● In Stock' : '● Out of Stock'}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Area type="monotone" dataKey="price" stroke="#FFD500" fill="url(#priceGrad)" strokeWidth={2} dot={{ fill: '#FFD500', r: 3 }} activeDot={{ r: 5 }} />
+                      </AreaChart>
+                    )}
                   </ResponsiveContainer>
                 </div>
               </div>
@@ -383,8 +735,11 @@ export default function ProductDetail() {
               </div>
             )}
 
-            {/* Stock availability chart */}
-            {stockChartData.length > 1 && (
+            {/* ══════════════════════════════════════════════════════════
+                STOCK AVAILABILITY — multi-source when retailers exist
+               ══════════════════════════════════════════════════════════ */}
+            {stockChartData.length > 1 && !hasMultipleSources && (
+              /* Original single-source stock chart (LEGO.com only) */
               <div className="glass rounded-xl p-5">
                 <h3 className="font-display font-semibold text-sm mb-1">Stock Availability Over Time</h3>
                 <p className="text-[10px] text-gray-500 mb-4">Green = available · Orange = backorder/limited · Red = out of stock</p>
@@ -411,6 +766,65 @@ export default function ProductDetail() {
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* ── Multi-source stock availability grid ── */}
+            {hasMultipleSources && retailerStockChartData.length > 1 && (
+              <div className="glass rounded-xl p-5">
+                <h3 className="font-display font-semibold text-sm mb-1">Stock Availability by Retailer</h3>
+                <p className="text-[10px] text-gray-500 mb-4">Tracking availability across {activeSources.length} sources</p>
+
+                {/* Heatmap-style grid */}
+                <div className="overflow-x-auto">
+                  <div className="min-w-[400px]">
+                    {/* Header row: dates */}
+                    <div className="flex items-center gap-0 mb-1">
+                      <div className="w-20 shrink-0" />
+                      {retailerStockChartData.map((d, i) => (
+                        <div key={i} className="flex-1 text-center text-[8px] text-gray-600 font-mono truncate px-0.5">
+                          {/* Show every Nth label to avoid crowding */}
+                          {i % Math.max(1, Math.floor(retailerStockChartData.length / 8)) === 0 ? d.date : ''}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* One row per source */}
+                    {activeSources.map(source => {
+                      const cfg = RETAILER_CONFIG[source]
+                      return (
+                        <div key={source} className="flex items-center gap-0 mb-1">
+                          <div className="w-20 shrink-0 text-[10px] font-semibold truncate pr-2" style={{ color: cfg.color }}>
+                            {cfg.label}
+                          </div>
+                          {retailerStockChartData.map((d, i) => {
+                            const val = d[source]
+                            const hasData = val !== undefined
+                            const isAvailable = val === true
+                            return (
+                              <div
+                                key={i}
+                                className="flex-1 h-5 mx-px rounded-sm transition-colors"
+                                style={{
+                                  backgroundColor: !hasData ? '#1a1a26' : isAvailable ? '#22c55e40' : '#ef444440',
+                                  border: hasData ? `1px solid ${isAvailable ? '#22c55e30' : '#ef444430'}` : '1px solid #1a1a26',
+                                }}
+                                title={`${cfg.label} — ${d.date}: ${!hasData ? 'No data' : isAvailable ? 'Available' : 'Unavailable'}`}
+                              />
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+
+                    {/* Legend */}
+                    <div className="flex items-center gap-4 mt-3 text-[9px] text-gray-500">
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500/40 border border-green-500/30" /> Available</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-500/25 border border-red-500/20" /> Unavailable</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#1a1a26] border border-[#1a1a26]" /> No data</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -469,6 +883,82 @@ export default function ProductDetail() {
         </div>
       </div>
     </main>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// RETAILER CARD — compact card for "Where to Buy" sidebar
+// ══════════════════════════════════════════════════════════════
+function RetailerCard({ source, price, regularPrice, onSale, salePct, available, freeShipping, url, reviewAvg, reviewCount, isBest, date }) {
+  const cfg = RETAILER_CONFIG[source]
+  if (!cfg) return null
+
+  const hasPrice = price != null && price > 0
+
+  return (
+    <a
+      href={url || '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`block rounded-lg p-3 transition-all border hover:bg-white/[0.03] ${
+        isBest ? 'border-green-500/30 bg-green-500/5' : 'border-lego-border bg-lego-surface/50'
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
+          <span className="text-[11px] font-semibold" style={{ color: cfg.color }}>{cfg.label}</span>
+          {isBest && <span className="text-[8px] font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-full uppercase">Best</span>}
+        </div>
+        <ExternalLink size={11} className="text-gray-600" />
+      </div>
+
+      <div className="flex items-baseline gap-2">
+        {hasPrice ? (
+          <>
+            <span className="text-base font-bold text-white">${price.toFixed(2)}</span>
+            {onSale && regularPrice && regularPrice > price && (
+              <span className="text-[10px] text-gray-500 line-through">${regularPrice.toFixed(2)}</span>
+            )}
+            {onSale && salePct > 0 && (
+              <span className="text-[9px] font-bold text-lego-red">−{salePct.toFixed(0)}%</span>
+            )}
+          </>
+        ) : (
+          <span className="text-xs text-gray-500">Price unavailable</span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+        {/* Availability */}
+        {available != null && (
+          <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium ${available ? 'text-green-400' : 'text-red-400'}`}>
+            {available ? <CheckCircle2 size={9} /> : <XCircle size={9} />}
+            {available ? 'In Stock' : 'Out of Stock'}
+          </span>
+        )}
+        {/* Free shipping */}
+        {freeShipping && (
+          <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-blue-400">
+            <Truck size={9} /> Free Ship
+          </span>
+        )}
+        {/* Rating */}
+        {reviewAvg > 0 && (
+          <span className="inline-flex items-center gap-0.5 text-[9px] text-gray-500">
+            <Star size={8} className="text-lego-yellow fill-lego-yellow" /> {reviewAvg.toFixed(1)}
+            {reviewCount > 0 && <span>({reviewCount.toLocaleString()})</span>}
+          </span>
+        )}
+      </div>
+
+      {/* Last updated */}
+      {date && (
+        <div className="text-[8px] text-gray-600 mt-1.5">
+          Updated {new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
+        </div>
+      )}
+    </a>
   )
 }
 

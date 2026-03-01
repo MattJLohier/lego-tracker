@@ -2,6 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { normalizeStatus, getStatusDisplay, getStatusShortLabel } from '../lib/stockStatus'
 
+// ── Retailer color/config constants (shared across hooks + components) ──
+export const RETAILER_CONFIG = {
+  lego:    { label: 'LEGO.com', color: '#FFD500', stroke: '#FFD500', dotClass: 'bg-yellow-400' },
+  bestbuy: { label: 'Best Buy', color: '#0A55C4', stroke: '#0A55C4', dotClass: 'bg-blue-500' },
+  amazon:  { label: 'Amazon',   color: '#FF9900', stroke: '#FF9900', dotClass: 'bg-orange-400' },
+  target:  { label: 'Target',   color: '#CC0000', stroke: '#CC0000', dotClass: 'bg-red-500' },
+}
+
 // Batch-fetch price/stock history for a list of product codes (for card sparklines)
 export function useProductHistories(productCodes = []) {
   const [histories, setHistories] = useState({})
@@ -304,6 +312,10 @@ export function useProductDetail(slug) {
   const [product, setProduct] = useState(null)
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
+  // ── Cross-source data ──
+  const [retailerPrices, setRetailerPrices] = useState(null)   // from mart_price_comparison
+  const [retailerHistory, setRetailerHistory] = useState({})    // { bestbuy: [...], amazon: [...], target: [...] }
+  const [retailerLoading, setRetailerLoading] = useState(false)
 
   useEffect(() => {
     if (!slug) return
@@ -363,13 +375,92 @@ export function useProductDetail(slug) {
 
         setProduct(latest)
         setHistory(data)
+
+        // ── Fetch cross-source data using product_code ──
+        const productCode = latest.product_code
+        if (productCode) {
+          fetchRetailerData(productCode)
+        }
       }
       setLoading(false)
     }
+
+    async function fetchRetailerData(productCode) {
+      setRetailerLoading(true)
+      try {
+        // 1. Get current prices from mart_price_comparison (one row, all sources side-by-side)
+        const { data: comparison } = await supabase
+          .from('mart_price_comparison')
+          .select('*')
+          .eq('product_code', productCode)
+          .limit(1)
+          .single()
+
+        if (comparison) {
+          setRetailerPrices(comparison)
+        }
+
+        // 2. Get source mappings to know which retailer IDs to query
+        const { data: mappings } = await supabase
+          .from('product_source_map')
+          .select('source, source_product_id, source_name, source_url, match_confidence')
+          .eq('product_code', productCode)
+          .eq('active', true)
+
+        if (!mappings || mappings.length === 0) {
+          setRetailerLoading(false)
+          return
+        }
+
+        // 3. Fetch price history per retailer in parallel
+        const historyPromises = {}
+
+        for (const mapping of mappings) {
+          if (mapping.source === 'bestbuy') {
+            historyPromises.bestbuy = supabase
+              .from('v_bestbuy_timeseries')
+              .select('sku, product_name, sale_price, regular_price, on_sale, percent_savings, online_available, in_store_available, free_shipping, review_avg, review_count, product_url, scraped_date')
+              .eq('sku', mapping.source_product_id)
+              .order('scraped_date', { ascending: true })
+          }
+          if (mapping.source === 'amazon') {
+            historyPromises.amazon = supabase
+              .from('v_amazon_timeseries')
+              .select('asin, product_name, price, review_avg, review_count, product_url, image_url, scraped_date')
+              .eq('asin', mapping.source_product_id)
+              .order('scraped_date', { ascending: true })
+          }
+          if (mapping.source === 'target') {
+            historyPromises.target = supabase
+              .from('v_target_timeseries')
+              .select('tcin, product_name, sale_price, regular_price, on_sale, percent_savings, free_shipping, review_avg, review_count, product_url, scraped_date')
+              .eq('tcin', mapping.source_product_id)
+              .order('scraped_date', { ascending: true })
+          }
+        }
+
+        const sources = Object.keys(historyPromises)
+        const results = await Promise.all(Object.values(historyPromises))
+
+        const retailerHist = {}
+        sources.forEach((source, i) => {
+          const { data: rows } = results[i]
+          if (rows && rows.length > 0) {
+            retailerHist[source] = rows
+          }
+        })
+
+        setRetailerHistory(retailerHist)
+      } catch (err) {
+        console.warn('Cross-source fetch error:', err)
+      }
+      setRetailerLoading(false)
+    }
+
     fetch()
   }, [slug])
 
-  return { product, history, loading }
+  return { product, history, loading, retailerPrices, retailerHistory, retailerLoading }
 }
 
 export function useCompareProducts(slugs = []) {
