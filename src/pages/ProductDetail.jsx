@@ -86,6 +86,7 @@ function normalizeRetailerPrice(source, row) {
     case 'bestbuy': return { date: row.scraped_date, price: Number(row.sale_price) || null }
     case 'amazon':  return { date: row.scraped_date, price: Number(row.price) || null }
     case 'target':  return { date: row.scraped_date, price: Number(row.sale_price) || null }
+    case 'walmart': return { date: row.scraped_date, price: Number(row.sale_price) || null }
     default:        return { date: row.scraped_date, price: null }
   }
 }
@@ -105,6 +106,22 @@ function getLatestRetailer(source, rows) {
       available: latest.online_available,
       inStore: latest.in_store_available,
       freeShipping: latest.free_shipping,
+      reviewAvg: Number(latest.review_avg) || null,
+      reviewCount: Number(latest.review_count) || 0,
+      url: latest.product_url,
+      date: latest.scraped_date,
+      dataPoints: rows.length,
+    }
+    case 'walmart': return {
+      source: 'walmart',
+      name: latest.product_name,
+      price: Number(latest.sale_price) || null,
+      regularPrice: Number(latest.regular_price) || null,
+      onSale: latest.on_sale,
+      salePct: Number(latest.percent_savings) || null,
+      available: latest.availability_status === 'IN_STOCK' || latest.availability_status === 'AVAILABLE',
+      inStore: null,
+      freeShipping: null,
       reviewAvg: Number(latest.review_avg) || null,
       reviewCount: Number(latest.review_count) || 0,
       url: latest.product_url,
@@ -156,7 +173,7 @@ export default function ProductDetail() {
   const [showAllRetailers, setShowAllRetailers] = useState(false)
 
   // ── Which retailer lines to show on chart ──
-  const [enabledLines, setEnabledLines] = useState({ lego: true, bestbuy: true, amazon: true, target: true })
+  const [enabledLines, setEnabledLines] = useState({ lego: true, bestbuy: true, amazon: true, target: true, walmart: true })
   const toggleLine = (key) => setEnabledLines(prev => ({ ...prev, [key]: !prev[key] }))
 
   const priceStats = useMemo(() => {
@@ -229,13 +246,14 @@ export default function ProductDetail() {
         bestbuy: prices.bestbuy ?? null,
         amazon: prices.amazon ?? null,
         target: prices.target ?? null,
+        walmart: prices.walmart ?? null,
       }))
   }, [history, retailerHistory])
 
   // ── Which sources actually have data for the chart ──
   const activeSources = useMemo(() => {
     const sources = ['lego']
-    for (const s of ['bestbuy', 'amazon', 'target']) {
+    for (const s of ['bestbuy', 'amazon', 'target', 'walmart']) {
       if (retailerHistory[s]?.length > 0) sources.push(s)
     }
     return sources
@@ -244,7 +262,7 @@ export default function ProductDetail() {
   // ── Get all-source price range for chart Y axis ──
   const allSourcePriceStats = useMemo(() => {
     const allPrices = multiSourceChartData.flatMap(d =>
-      [d.lego, d.bestbuy, d.amazon, d.target].filter(p => p != null && p > 0)
+      [d.lego, d.bestbuy, d.amazon, d.target, d.walmart].filter(p => p != null && p > 0)
     )
     if (allPrices.length === 0) return null
     return {
@@ -313,6 +331,15 @@ export default function ProductDetail() {
         const dateKey = row.scraped_date
         if (!dateMap.has(dateKey)) dateMap.set(dateKey, {})
         dateMap.get(dateKey).target = true
+      }
+    }
+
+    // Walmart
+    if (retailerHistory.walmart) {
+      for (const row of retailerHistory.walmart) {
+        const dateKey = row.scraped_date
+        if (!dateMap.has(dateKey)) dateMap.set(dateKey, {})
+        dateMap.get(dateKey).walmart = row.availability_status === 'IN_STOCK' || row.availability_status === 'AVAILABLE'
       }
     }
 

@@ -8,6 +8,7 @@ export const RETAILER_CONFIG = {
   bestbuy: { label: 'Best Buy', color: '#0A55C4', stroke: '#0A55C4', dotClass: 'bg-blue-500' },
   amazon:  { label: 'Amazon',   color: '#FF9900', stroke: '#FF9900', dotClass: 'bg-orange-400' },
   target:  { label: 'Target',   color: '#CC0000', stroke: '#CC0000', dotClass: 'bg-red-500' },
+  walmart: { label: 'Walmart',  color: '#0071DC', stroke: '#0071DC', dotClass: 'bg-blue-600' },
 }
 
 // Batch-fetch price/stock history for a list of product codes (for card sparklines)
@@ -406,7 +407,7 @@ export function useProductDetail(slug) {
           .select('source, source_product_id, source_name, source_url, match_confidence')
           .eq('product_code', productCode)
           .eq('active', true)
-
+        console.log('🔍 mappings for', productCode, mappings)
         if (!mappings || mappings.length === 0) {
           setRetailerLoading(false)
           return
@@ -437,11 +438,19 @@ export function useProductDetail(slug) {
               .eq('tcin', mapping.source_product_id)
               .order('scraped_date', { ascending: true })
           }
+          if (mapping.source === 'walmart') {
+            historyPromises.walmart = supabase
+              .from('v_walmart_timeseries')
+              .select('us_item_id, product_name, sale_price, regular_price, on_sale, percent_savings, availability_status, availability_display, review_avg, review_count, product_url, scraped_date')
+              .eq('us_item_id', mapping.source_product_id)
+              .order('scraped_date', { ascending: true })
+          }
         }
 
         const sources = Object.keys(historyPromises)
         const results = await Promise.all(Object.values(historyPromises))
 
+        console.log('🔍 raw retailer results:', sources.map((s, i) => ({ source: s, data: results[i].data, error: results[i].error })))
         const retailerHist = {}
         sources.forEach((source, i) => {
           const { data: rows } = results[i]
@@ -449,6 +458,7 @@ export function useProductDetail(slug) {
             retailerHist[source] = rows
           }
         })
+        console.log('🔍 retailerHist', retailerHist)
 
         setRetailerHistory(retailerHist)
       } catch (err) {
