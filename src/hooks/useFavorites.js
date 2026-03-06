@@ -21,10 +21,9 @@ export function useFavorites() {
     // Fetch full product details for favorites
     if (codes.size > 0) {
       const { data: products } = await supabase
-        .from('fact_product_daily_snapshot')
+        .from('v_latest_products')        // ← same view used in useProducts()
         .select('*')
         .in('product_code', Array.from(codes))
-        .order('scraped_date', { ascending: false })
 
       // Dedup to latest per product
       const seen = new Map()
