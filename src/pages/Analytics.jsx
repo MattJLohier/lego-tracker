@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   BarChart3, DollarSign, Package, Star, ShoppingBag, TrendingDown, TrendingUp, Layers, Tag, Zap, Flame,
   Clock, GripVertical, Plus, X, ChevronDown, PieChart as PieIcon, LineChart as LineIcon, BarChart as BarIcon,
-  Save, FolderOpen, Trash2, Edit2, Check, BookOpen, AlertTriangle, ArrowRight, Sparkles
+  Save, FolderOpen, Trash2, Edit2, Check, BookOpen, AlertTriangle, ArrowRight, Sparkles, Store
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
@@ -18,6 +18,8 @@ import { trackTabSwitch, trackChartCreated, trackDashboardSaved } from '../lib/a
 import { normalizeStatus, getStatusInfo, getStatusDisplay } from '../lib/stockStatus'
 import { ProGate, UpgradeModal, UpgradeBanner } from '../components/UpgradeModal'
 import MarketStatusTab from '../components/MarketStatusTab'
+import RetailerAnalyticsTab from '../components/RetailerAnalyticsTab'
+import PriceSwingsTab from '../components/PriceSwingsTab'
 
 const CHART_COLORS = ['#E3000B', '#FFD500', '#006CB7', '#00963F', '#FF6B6B', '#a78bfa', '#f97316', '#06b6d4', '#ec4899', '#84cc16', '#f59e0b', '#8b5cf6', '#14b8a6', '#ef4444', '#6366f1', '#22c55e']
 const TOOLTIP_STYLE = { background: '#16161F', border: '1px solid #2A2A3D', borderRadius: '8px', fontSize: '11px' }
@@ -28,6 +30,7 @@ const TABS = [
   { id: 'status', label: 'Status Changes', icon: ShoppingBag },
   { id: 'sales', label: 'New Sales', icon: Tag },
   { id: 'timeseries', label: 'Time Series', icon: Clock },
+  { id: 'retailers', label: 'Retailers', icon: Store },
   { id: 'custom', label: 'Custom Builder', icon: Plus },
   { id: 'saved', label: 'Saved Reports', icon: BookOpen },
 ]
@@ -46,6 +49,7 @@ export default function Analytics() {
   const { user } = useAuth()
   const { isPro } = useSubscription()
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const tabScrollRef = useRef(null)
 
   const handleTabSwitch = (tab) => {
     setActiveTab(tab)
@@ -62,33 +66,57 @@ export default function Analytics() {
           <p className="text-gray-500 text-xs">Live insights across the entire LEGO catalog</p>
         </div>
 
-        {/* Tab Bar */}
-        <div className="flex gap-1 mb-6 glass rounded-xl p-1 w-fit flex-wrap">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => handleTabSwitch(id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all
-                ${activeTab === id
-                  ? 'bg-lego-red text-white shadow-lg shadow-lego-red/20'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-            >
-              <Icon size={14} />
-              {label}
-              {id === 'saved' && savedDashboardsHook.dashboards.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 bg-white/10 rounded-full text-[9px]">
-                  {savedDashboardsHook.dashboards.length}
-                </span>
-              )}
-            </button>
-          ))}
+        {/* ═══ Tab Bar — horizontal scroll on mobile, wraps on desktop ═══ */}
+        <div className="relative mb-6">
+          {/* Fade hint on right edge (mobile only) */}
+          <div className="absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-[var(--bg-page,#0e0e14)] to-transparent z-10 pointer-events-none sm:hidden" />
+          <div
+            ref={(el) => {
+              tabScrollRef.current = el
+              // Hide webkit scrollbar directly via style
+              if (el) {
+                const id = 'tab-scroll-style'
+                if (!document.getElementById(id)) {
+                  const style = document.createElement('style')
+                  style.id = id
+                  style.textContent = '.tab-scroll-hide::-webkit-scrollbar{display:none}'
+                  document.head.appendChild(style)
+                }
+              }
+            }}
+            className="tab-scroll-hide flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
+            }}
+          >
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => handleTabSwitch(id)}
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap shrink-0
+                  ${activeTab === id
+                    ? 'bg-lego-red text-white shadow-lg shadow-lego-red/20'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5 bg-white/[0.03]'}`}
+              >
+                <Icon size={13} />
+                {label}
+                {id === 'saved' && savedDashboardsHook.dashboards.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 bg-white/10 rounded-full text-[9px]">
+                    {savedDashboardsHook.dashboards.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         {activeTab === 'overview' && (
           <OverviewTab stats={stats} sL={sL} themes={themes} tL={tL} bestValue={bestValue} bL={bL} newProducts={newProducts} nL={nL} expensiveSets={expensiveSets} eL={eL} />
         )}
         {activeTab === 'prices' && (
-          marketAlerts ? <MarketPriceSwingsTab swings={marketAlerts.priceSwings} /> : maL ? <LoadingSkeleton /> : null
+          marketAlerts ? <PriceSwingsTab swings={marketAlerts.priceSwings} /> : maL ? <LoadingSkeleton /> : null
         )}
         {activeTab === 'status' && (
           marketAlerts ? <MarketStatusTab
@@ -103,6 +131,9 @@ export default function Analytics() {
         )}
         {activeTab === 'timeseries' && (
           <TimeSeriesTab snapshots={snapshots} loading={snapL || mtsL} marketTimeSeries={marketTimeSeries} />
+        )}
+        {activeTab === 'retailers' && (
+          <RetailerAnalyticsTab />
         )}
         {activeTab === 'custom' && (
           <ProGate isPro={isPro || !!user} isLoggedIn={!!user} feature="Custom Analytics Builder" onUpgradeClick={() => setShowUpgrade(true)}>
@@ -128,8 +159,8 @@ function OverviewTab({ stats, sL, themes, tL, bestValue, bL, newProducts, nL, ex
     <>
       {!sL && stats && (
         <>
-          <h2 className="font-display font-semibold text-sm text-gray-400 uppercase tracking-wider mb-3">Market Overview</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+          <h2 className="font-display font-semibold text-xs sm:text-sm text-gray-400 uppercase tracking-wider mb-3">Market Overview</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-6 sm:mb-8">
             <KPI icon={<Package size={16} />} label="Products" value={<AnimatedCounter end={stats.totalProducts} />} color="text-lego-yellow" />
             <KPI icon={<Layers size={16} />} label="Themes" value={<AnimatedCounter end={stats.uniqueThemes} />} color="text-lego-blue" />
             <KPI icon={<DollarSign size={16} />} label="Avg Price" value={<AnimatedCounter end={stats.avgPrice} prefix="$" decimals={0} />} color="text-lego-yellow" />
@@ -137,7 +168,7 @@ function OverviewTab({ stats, sL, themes, tL, bestValue, bL, newProducts, nL, ex
             <KPI icon={<DollarSign size={16} />} label="Catalog Value" value={<AnimatedCounter end={stats.totalCatalogValue} prefix="$" />} color="text-green-400" />
             <KPI icon={<Package size={16} />} label="Total Pieces" value={<AnimatedCounter end={stats.totalPieces} />} color="text-purple-400" />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 mb-6 sm:mb-8">
             <KPI icon={<Star size={16} />} label="Avg Rating" value={<AnimatedCounter end={stats.avgRating} decimals={1} suffix="★" />} color="text-lego-yellow" />
             <KPI icon={<ShoppingBag size={16} />} label="In Stock" value={<AnimatedCounter end={stats.inStockPct} suffix="%" />} color="text-green-400" />
             <KPI icon={<TrendingDown size={16} />} label="On Sale" value={<AnimatedCounter end={stats.onSaleCount} />} color="text-lego-red" />
@@ -148,19 +179,19 @@ function OverviewTab({ stats, sL, themes, tL, bestValue, bL, newProducts, nL, ex
         </>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-5 mb-5">
+      <div className="grid lg:grid-cols-2 gap-4 sm:gap-5 mb-4 sm:mb-5">
         {!tL && <ThemeBarChart themes={themes} />}
         {!tL && <AvailabilityPie themes={themes} />}
       </div>
 
       {!eL && <MostExpensiveSetsChart products={expensiveSets} />}
 
-      <div className="grid lg:grid-cols-2 gap-5 mb-5 mt-5">
+      <div className="grid lg:grid-cols-2 gap-4 sm:gap-5 mb-4 sm:mb-5 mt-4 sm:mt-5">
         {!tL && <PriceByThemeChart themes={themes} />}
         {!tL && <PricePerPieceChart themes={themes} />}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-5 mb-5">
+      <div className="grid lg:grid-cols-2 gap-4 sm:gap-5 mb-4 sm:mb-5">
         {!bL && <BestValueTable products={bestValue} />}
         {!nL && <NewProductsTable products={newProducts} />}
       </div>
@@ -279,30 +310,26 @@ function TimeSeriesTab({ snapshots, loading, marketTimeSeries = [] }) {
     }))
   }, [snapshots])
 
-  // ─── Market-level KPI Time Series (from mart_market_daily_summary) ───
-  // This is the SAME data source as Overview, so numbers always match.
   const marketMetrics = useMemo(() => {
     return marketTimeSeries.map(m => ({
       ...m,
       date: fmtDate(m.date),
-      // Derive avgPieces since the SQL view doesn't have it directly
       avgPieces: m.totalProducts > 0 ? Math.round(m.totalPieces / m.totalProducts) : 0,
     }))
   }, [marketTimeSeries])
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {!hasTimeSeries && (
-        <div className="glass rounded-xl p-8 text-center">
+        <div className="glass rounded-xl p-6 sm:p-8 text-center">
           <Clock size={32} className="text-gray-600 mx-auto mb-3" />
           <h3 className="font-display font-semibold text-sm text-gray-300 mb-1">Time Series Building Up</h3>
           <p className="text-[11px] text-gray-500">Time series charts will be richer with 2+ days of tracked data. The charts below show what's available so far.</p>
         </div>
       )}
 
-      {/* ─── Market KPI Sparkline Grid ─── */}
       {marketMetrics.length > 0 && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           <SparklineCard data={marketMetrics} dataKey="totalProducts" label="Total Products" color="#FFD500" fmt={v => v.toLocaleString()} />
           <SparklineCard data={marketMetrics} dataKey="uniqueThemes" label="Unique Themes" color="#006CB7" fmt={v => v} />
           <SparklineCard data={marketMetrics} dataKey="avgPrice" label="Avg Price" color="#FFD500" fmt={v => `$${v.toFixed(2)}`} />
@@ -320,7 +347,7 @@ function TimeSeriesTab({ snapshots, loading, marketTimeSeries = [] }) {
 
       {totalValueOverTime.length > 0 && (
         <ChartCard title="Total Catalog Value Over Time" subtitle="Sum of all tracked product prices per day">
-          <div className="h-[300px]">
+          <div className="h-[250px] sm:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={totalValueOverTime}>
                 <defs>
@@ -330,8 +357,8 @@ function TimeSeriesTab({ snapshots, loading, marketTimeSeries = [] }) {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
-                <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 9 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: '#555', fontSize: 9 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} width={45} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`$${Number(v).toLocaleString()}`, 'Total Value']} />
                 <Area type="monotone" dataKey="value" stroke="#FFD500" fill="url(#valueGrad)" strokeWidth={2} />
               </AreaChart>
@@ -342,14 +369,14 @@ function TimeSeriesTab({ snapshots, loading, marketTimeSeries = [] }) {
 
       {catalogValueByDateTheme.data.length > 0 && (
         <ChartCard title="Inventory Value by Theme Over Time" subtitle={`Top ${catalogValueByDateTheme.themes.length} themes by total catalog value`}>
-          <div className="h-[400px]">
+          <div className="h-[300px] sm:h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={catalogValueByDateTheme.data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
-                <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 9 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: '#555', fontSize: 9 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} width={45} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`$${Number(v).toLocaleString()}`]} />
-                <RLegend wrapperStyle={{ fontSize: '10px', color: '#888' }} />
+                <RLegend wrapperStyle={{ fontSize: '9px', color: '#888' }} />
                 {catalogValueByDateTheme.themes.map((t, i) => (
                   <Area key={t} type="monotone" dataKey={t} stackId="1" fill={CHART_COLORS[i % CHART_COLORS.length]} stroke={CHART_COLORS[i % CHART_COLORS.length]} fillOpacity={0.6} />
                 ))}
@@ -360,19 +387,19 @@ function TimeSeriesTab({ snapshots, loading, marketTimeSeries = [] }) {
       )}
 
       <ChartCard title="Set Release Timeline" subtitle="Number of new sets first seen per day">
-        <div className="h-[300px]">
+        <div className="h-[250px] sm:h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={releaseTimeline}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
-              <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 10 }} />
-              <YAxis tick={{ fill: '#555', fontSize: 10 }} />
+              <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 9 }} interval="preserveStartEnd" />
+              <YAxis tick={{ fill: '#555', fontSize: 9 }} width={35} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
                 content={({ active, payload }) => {
                   if (!active || !payload?.[0]) return null
                   const d = payload[0].payload
                   return (
-                    <div className="glass rounded-lg p-3 border border-lego-border text-xs">
+                    <div className="glass rounded-lg p-2 sm:p-3 border border-lego-border text-[10px] sm:text-xs">
                       <div className="text-white font-semibold mb-1">{d.date}</div>
                       <div className="text-gray-400">{d.count} new sets</div>
                       <div className="text-lego-yellow">${d.totalValue.toLocaleString()} total value</div>
@@ -389,14 +416,14 @@ function TimeSeriesTab({ snapshots, loading, marketTimeSeries = [] }) {
 
       {availabilityOverTime.data.length > 0 && (
         <ChartCard title="Availability Status Over Time" subtitle="Product count by availability status per day (normalized)">
-          <div className="h-[350px]">
+          <div className="h-[280px] sm:h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={availabilityOverTime.data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
-                <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#555', fontSize: 10 }} />
+                <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 9 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: '#555', fontSize: 9 }} width={35} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <RLegend wrapperStyle={{ fontSize: '10px', color: '#888' }} />
+                <RLegend wrapperStyle={{ fontSize: '9px', color: '#888' }} />
                 {availabilityOverTime.statuses.map((s) => (
                   <Area key={s} type="monotone" dataKey={s} stackId="1"
                     fill={availabilityOverTime.colorMap[s]}
@@ -422,7 +449,6 @@ function AvailabilityByThemeOverTime({ snapshots }) {
     const dates = [...new Set(snapshots.map(s => s.scraped_date))].sort()
     if (dates.length < 2) return { chartData: [], themes: [] }
 
-    // Get top 10 themes by product count
     const themeCounts = {}
     const latestDate = dates[dates.length - 1]
     for (const s of snapshots) {
@@ -435,7 +461,6 @@ function AvailabilityByThemeOverTime({ snapshots }) {
       .slice(0, 10)
       .map(e => e[0])
 
-    // Build: for each date, count in-stock products per theme
     const map = new Map()
     for (const s of snapshots) {
       if (!s.scraped_date || !s.theme || !topThemes.includes(s.theme)) continue
@@ -463,14 +488,14 @@ function AvailabilityByThemeOverTime({ snapshots }) {
 
   return (
     <ChartCard title="Product Availability by Theme Over Time" subtitle="In-stock product count per theme (top 10 themes)">
-      <div className="h-[400px]">
+      <div className="h-[300px] sm:h-[400px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data.chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
-            <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 10 }} />
-            <YAxis tick={{ fill: '#555', fontSize: 10 }} />
+            <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 9 }} interval="preserveStartEnd" />
+            <YAxis tick={{ fill: '#555', fontSize: 9 }} width={35} />
             <Tooltip contentStyle={TOOLTIP_STYLE} />
-            <RLegend wrapperStyle={{ fontSize: '10px', color: '#888' }} />
+            <RLegend wrapperStyle={{ fontSize: '9px', color: '#888' }} />
             {data.themes.map((t, i) => (
               <Area key={t} type="monotone" dataKey={t} stackId="1" fill={CHART_COLORS[i % CHART_COLORS.length]} stroke={CHART_COLORS[i % CHART_COLORS.length]} fillOpacity={0.6} />
             ))}
@@ -526,14 +551,14 @@ function InStockPctByThemeOverTime({ snapshots }) {
 
   return (
     <ChartCard title="In-Stock % by Theme Over Time" subtitle="Percentage of products available per theme (top 8)">
-      <div className="h-[400px]">
+      <div className="h-[300px] sm:h-[400px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data.chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
-            <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 10 }} />
-            <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `${v}%`} domain={[0, 100]} />
+            <XAxis dataKey="date" tick={{ fill: '#888', fontSize: 9 }} interval="preserveStartEnd" />
+            <YAxis tick={{ fill: '#555', fontSize: 9 }} tickFormatter={v => `${v}%`} domain={[0, 100]} width={35} />
             <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`${v}%`]} />
-            <RLegend wrapperStyle={{ fontSize: '10px', color: '#888' }} />
+            <RLegend wrapperStyle={{ fontSize: '9px', color: '#888' }} />
             {data.themes.map((t, i) => (
               <Line key={t} type="monotone" dataKey={t} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2} dot={false} />
             ))}
@@ -589,7 +614,7 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUp
   ])
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [saveName, setSaveName] = useState('')
-  const [saveStatus, setSaveStatus] = useState(null) // 'saving' | 'saved' | 'error'
+  const [saveStatus, setSaveStatus] = useState(null)
 
   const { saveDashboard } = savedDashboardsHook
 
@@ -664,48 +689,58 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUp
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2 className="font-display font-semibold text-sm text-gray-300">Custom Analytics Builder</h2>
-          <p className="text-[10px] text-gray-500 mt-0.5">Drag to reorder charts • Pick any metric, aggregation, grouping, and chart type</p>
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <div className="min-w-0">
+          <h2 className="font-display font-semibold text-xs sm:text-sm text-gray-300">Custom Analytics Builder</h2>
+          <p className="text-[9px] sm:text-[10px] text-gray-500 mt-0.5">Drag to reorder • Pick any metric, aggregation, grouping, and chart type</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {charts.length > 0 && (
             <button
               onClick={() => { if (isPro) { setSaveDialogOpen(true) } else { onUpgrade?.() } }}
-              className="flex items-center gap-1.5 px-3 py-1.5 glass glass-hover text-gray-300 text-xs font-semibold rounded-lg transition-colors"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 glass glass-hover text-gray-300 text-xs font-semibold rounded-lg transition-colors"
             >
-              <Save size={14} /> Save Dashboard {!isPro && <span className="text-lego-yellow text-[9px] ml-1">PRO</span>}
+              <Save size={14} /> Save {!isPro && <span className="text-lego-yellow text-[9px] ml-1">PRO</span>}
             </button>
           )}
           <button
             onClick={addChart}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-blue hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-lego-blue hover:bg-blue-700 text-white text-[11px] sm:text-xs font-semibold rounded-lg transition-colors"
           >
-            <Plus size={14} /> Add Chart
+            <Plus size={14} /> <span className="hidden sm:inline">Add Chart</span><span className="sm:hidden">Add</span>
           </button>
         </div>
       </div>
 
+      {/* Mobile save button */}
+      {charts.length > 0 && (
+        <button
+          onClick={() => { if (isPro) { setSaveDialogOpen(true) } else { onUpgrade?.() } }}
+          className="sm:hidden flex items-center justify-center gap-1.5 w-full px-3 py-2 glass glass-hover text-gray-300 text-xs font-semibold rounded-lg transition-colors"
+        >
+          <Save size={14} /> Save Dashboard {!isPro && <span className="text-lego-yellow text-[9px] ml-1">PRO</span>}
+        </button>
+      )}
+
       {/* Save Dialog */}
       {saveDialogOpen && (
-        <div className="glass rounded-xl p-5 border border-lego-blue/30 animate-fade-in">
-          <div className="flex items-center gap-3">
-            <Save size={16} className="text-lego-blue shrink-0" />
+        <div className="glass rounded-xl p-3 sm:p-5 border border-lego-blue/30 animate-fade-in">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Save size={16} className="text-lego-blue shrink-0 hidden sm:block" />
             <input
               type="text"
               value={saveName}
               onChange={(e) => setSaveName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-              placeholder="Dashboard name (e.g., 'My Price Analysis')"
-              className="flex-1 bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-lego-blue"
+              placeholder="Dashboard name..."
+              className="flex-1 min-w-0 bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-lego-blue"
               autoFocus
             />
             <button
               onClick={handleSave}
               disabled={!saveName.trim() || saveStatus === 'saving'}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all shrink-0
                 ${saveStatus === 'saved'
                   ? 'bg-green-600 text-white'
                   : 'bg-lego-blue hover:bg-blue-700 text-white disabled:opacity-50'}`}
@@ -719,12 +754,12 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUp
               )}
             </button>
             <button onClick={() => { setSaveDialogOpen(false); setSaveName(''); setSaveStatus(null) }}
-              className="p-2 text-gray-500 hover:text-white rounded-lg transition-colors">
+              className="p-2 text-gray-500 hover:text-white rounded-lg transition-colors shrink-0">
               <X size={14} />
             </button>
           </div>
-          <p className="text-[10px] text-gray-500 mt-2 ml-7">
-            {charts.length} chart{charts.length !== 1 ? 's' : ''} will be saved. Find them in the Saved Reports tab.
+          <p className="text-[10px] text-gray-500 mt-2 sm:ml-7">
+            {charts.length} chart{charts.length !== 1 ? 's' : ''} will be saved.
           </p>
         </div>
       )}
@@ -739,28 +774,28 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUp
           className="glass rounded-xl overflow-hidden transition-all"
         >
           {/* Config Bar */}
-          <div className="flex flex-wrap items-center gap-2 p-4 border-b border-lego-border/50">
-            <div className="cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-400 transition-colors mr-1">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 p-3 sm:p-4 border-b border-lego-border/50">
+            <div className="cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-400 transition-colors mr-0.5 sm:mr-1 hidden sm:block">
               <GripVertical size={16} />
             </div>
             <FieldSelect label="Metric" value={chart.metric} options={NUMERIC_FIELDS} onChange={(v) => updateChart(chart.id, 'metric', v)} />
             <FieldSelect label="Aggregate" value={chart.agg} options={AGG_FUNCTIONS} onChange={(v) => updateChart(chart.id, 'agg', v)} />
             <FieldSelect label="Group By" value={chart.groupBy} options={GROUP_BY_FIELDS} onChange={(v) => updateChart(chart.id, 'groupBy', v)} />
-            <div className="flex items-center gap-0.5 ml-1 bg-lego-surface2 rounded-lg p-0.5">
+            <div className="flex items-center gap-0.5 bg-lego-surface2 rounded-lg p-0.5">
               {CHART_TYPES.map(({ key, label, icon: Icon }) => (
                 <button key={key} onClick={() => updateChart(chart.id, 'chartType', key)}
-                  className={`p-1.5 rounded-md transition-all ${chart.chartType === key ? 'bg-lego-red text-white' : 'text-gray-500 hover:text-white'}`}
-                  title={label}><Icon size={13} /></button>
+                  className={`p-1 sm:p-1.5 rounded-md transition-all ${chart.chartType === key ? 'bg-lego-red text-white' : 'text-gray-500 hover:text-white'}`}
+                  title={label}><Icon size={12} /></button>
               ))}
             </div>
             <button onClick={() => removeChart(chart.id)}
-              className="ml-auto p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"><X size={14} /></button>
+              className="ml-auto p-1 sm:p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"><X size={14} /></button>
           </div>
 
           {/* Chart */}
-          <div className="p-5">
-            <h3 className="font-display font-semibold text-sm mb-1 text-white">{chart.label}</h3>
-            <p className="text-[10px] text-gray-500 mb-4">
+          <div className="p-3 sm:p-5">
+            <h3 className="font-display font-semibold text-xs sm:text-sm mb-1 text-white">{chart.label}</h3>
+            <p className="text-[9px] sm:text-[10px] text-gray-500 mb-3 sm:mb-4">
               {AGG_FUNCTIONS.find(f => f.key === chart.agg)?.label} of {NUMERIC_FIELDS.find(f => f.key === chart.metric)?.label} grouped by {GROUP_BY_FIELDS.find(f => f.key === chart.groupBy)?.label}
             </p>
             <CustomChart config={chart} snapshots={chart.groupBy === 'scraped_date' ? snapshots : latestSnapshots} />
@@ -769,7 +804,7 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUp
       ))}
 
       {charts.length === 0 && (
-        <div className="glass rounded-xl p-12 text-center">
+        <div className="glass rounded-xl p-8 sm:p-12 text-center">
           <Plus size={32} className="text-gray-600 mx-auto mb-3" />
           <h3 className="font-display font-semibold text-sm text-gray-300 mb-1">No Charts Yet</h3>
           <p className="text-[11px] text-gray-500 mb-4">Add a chart to start building your custom dashboard</p>
@@ -785,12 +820,12 @@ function CustomBuilderTab({ snapshots, loading, savedDashboardsHook, isPro, onUp
 function FieldSelect({ label, value, options, onChange }) {
   return (
     <div className="relative">
-      <label className="absolute -top-1.5 left-2 text-[8px] font-mono uppercase tracking-wider text-gray-600 bg-lego-surface px-1 z-10">{label}</label>
+      <label className="absolute -top-1.5 left-2 text-[7px] sm:text-[8px] font-mono uppercase tracking-wider text-gray-600 bg-lego-surface px-1 z-10">{label}</label>
       <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="appearance-none bg-lego-surface2 border border-lego-border rounded-lg px-3 py-2 pr-7 text-xs text-white cursor-pointer focus:outline-none focus:border-lego-blue transition-colors">
+        className="appearance-none bg-lego-surface2 border border-lego-border rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 pr-6 sm:pr-7 text-[11px] sm:text-xs text-white cursor-pointer focus:outline-none focus:border-lego-blue transition-colors">
         {options.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
       </select>
-      <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+      <ChevronDown size={11} className="absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
     </div>
   )
 }
@@ -834,18 +869,18 @@ function CustomChart({ config, snapshots }) {
   }, [snapshots, metric, groupBy, agg])
 
   if (data.length === 0) {
-    return <div className="h-[250px] flex items-center justify-center text-gray-600 text-xs">No data for this configuration</div>
+    return <div className="h-[200px] sm:h-[250px] flex items-center justify-center text-gray-600 text-xs">No data for this configuration</div>
   }
 
   const isTimeSeries = groupBy === 'scraped_date'
 
   if (chartType === 'pie') {
     return (
-      <div className="h-[350px]">
+      <div className="h-[280px] sm:h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data.slice(0, 12)} cx="50%" cy="50%" innerRadius={60} outerRadius={110} dataKey="value" nameKey="name" stroke="none"
-              label={({ name, percent }) => `${name?.length > 15 ? name.slice(0, 15) + '…' : name} (${(percent * 100).toFixed(0)}%)`}>
+            <Pie data={data.slice(0, 12)} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="value" nameKey="name" stroke="none"
+              label={({ name, percent }) => `${name?.length > 12 ? name.slice(0, 12) + '…' : name} (${(percent * 100).toFixed(0)}%)`}>
               {data.slice(0, 12).map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
             </Pie>
             <Tooltip contentStyle={TOOLTIP_STYLE} />
@@ -857,14 +892,14 @@ function CustomChart({ config, snapshots }) {
 
   if (chartType === 'line') {
     return (
-      <div className="h-[350px]">
+      <div className="h-[280px] sm:h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
             <XAxis dataKey="name" tick={{ fill: '#888', fontSize: 9 }} angle={isTimeSeries ? 0 : -45} textAnchor={isTimeSeries ? 'middle' : 'end'} interval={isTimeSeries ? 'preserveStartEnd' : 0} />
-            <YAxis tick={{ fill: '#555', fontSize: 10 }} />
+            <YAxis tick={{ fill: '#555', fontSize: 9 }} width={40} />
             <Tooltip contentStyle={TOOLTIP_STYLE} />
-            <Line type="monotone" dataKey="value" stroke="#FFD500" strokeWidth={2} dot={{ fill: '#FFD500', r: 3 }} />
+            <Line type="monotone" dataKey="value" stroke="#FFD500" strokeWidth={2} dot={{ fill: '#FFD500', r: 2.5 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -873,7 +908,7 @@ function CustomChart({ config, snapshots }) {
 
   if (chartType === 'area') {
     return (
-      <div className="h-[350px]">
+      <div className="h-[280px] sm:h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
@@ -884,7 +919,7 @@ function CustomChart({ config, snapshots }) {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
             <XAxis dataKey="name" tick={{ fill: '#888', fontSize: 9 }} angle={isTimeSeries ? 0 : -45} textAnchor={isTimeSeries ? 'middle' : 'end'} interval={isTimeSeries ? 'preserveStartEnd' : 0} />
-            <YAxis tick={{ fill: '#555', fontSize: 10 }} />
+            <YAxis tick={{ fill: '#555', fontSize: 9 }} width={40} />
             <Tooltip contentStyle={TOOLTIP_STYLE} />
             <Area type="monotone" dataKey="value" stroke="#006CB7" fill="url(#customAreaGrad)" strokeWidth={2} />
           </AreaChart>
@@ -897,12 +932,12 @@ function CustomChart({ config, snapshots }) {
   const isHorizontal = !isTimeSeries && data.length > 8
   if (isHorizontal) {
     return (
-      <div style={{ height: Math.max(300, data.length * 28) }}>
+      <div style={{ height: Math.max(250, data.length * 26) }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 5, right: 15 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
-            <XAxis type="number" tick={{ fill: '#555', fontSize: 10 }} />
-            <YAxis type="category" dataKey="name" width={140} tick={{ fill: '#888', fontSize: 10 }} />
+            <XAxis type="number" tick={{ fill: '#555', fontSize: 9 }} />
+            <YAxis type="category" dataKey="name" width={120} tick={{ fill: '#888', fontSize: 9 }} />
             <Tooltip contentStyle={TOOLTIP_STYLE} />
             <Bar dataKey="value" fill="#E3000B" radius={[0, 4, 4, 0]} />
           </BarChart>
@@ -912,12 +947,12 @@ function CustomChart({ config, snapshots }) {
   }
 
   return (
-    <div className="h-[350px]">
+    <div className="h-[280px] sm:h-[350px]">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={isTimeSeries ? {} : { bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
           <XAxis dataKey="name" tick={{ fill: '#888', fontSize: 9 }} angle={isTimeSeries ? 0 : -45} textAnchor={isTimeSeries ? 'middle' : 'end'} interval={isTimeSeries ? 'preserveStartEnd' : 0} />
-          <YAxis tick={{ fill: '#555', fontSize: 10 }} />
+          <YAxis tick={{ fill: '#555', fontSize: 9 }} width={40} />
           <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Bar dataKey="value" fill="#E3000B" radius={[4, 4, 0, 0]} />
         </BarChart>
@@ -933,12 +968,10 @@ function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBu
   const [expandedDash, setExpandedDash] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
 
-  // Drag reorder state for dashboard cards
   const dragItem = useRef(null)
   const dragOverItem = useRef(null)
   const [orderedDashboards, setOrderedDashboards] = useState(dashboards)
 
-  // Sync orderedDashboards with dashboards from hook
   useMemo(() => {
     setOrderedDashboards(dashboards)
   }, [dashboards])
@@ -969,15 +1002,15 @@ function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBu
 
   if (orderedDashboards.length === 0) {
     return (
-      <div className="glass rounded-xl p-12 text-center">
-        <BookOpen size={40} className="text-gray-600 mx-auto mb-4" />
-        <h3 className="font-display font-semibold text-lg text-gray-300 mb-2">No Saved Reports Yet</h3>
-        <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+      <div className="glass rounded-xl p-8 sm:p-12 text-center">
+        <BookOpen size={36} className="text-gray-600 mx-auto mb-4" />
+        <h3 className="font-display font-semibold text-base sm:text-lg text-gray-300 mb-2">No Saved Reports Yet</h3>
+        <p className="text-xs sm:text-sm text-gray-500 mb-6 max-w-md mx-auto">
           Build custom charts in the Custom Builder tab, then save them as a dashboard to access them here anytime.
         </p>
         <button
           onClick={onSwitchToBuilder}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-lego-blue hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          className="inline-flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-lego-blue hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors"
         >
           <Plus size={16} /> Create Your First Dashboard
         </button>
@@ -986,19 +1019,19 @@ function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBu
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2 className="font-display font-semibold text-sm text-gray-300">Saved Reports</h2>
-          <p className="text-[10px] text-gray-500 mt-0.5">
-            {orderedDashboards.length} saved dashboard{orderedDashboards.length !== 1 ? 's' : ''} • Drag to reorder • Click to expand
+    <div className="space-y-4 sm:space-y-5">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <div className="min-w-0">
+          <h2 className="font-display font-semibold text-xs sm:text-sm text-gray-300">Saved Reports</h2>
+          <p className="text-[9px] sm:text-[10px] text-gray-500 mt-0.5">
+            {orderedDashboards.length} saved dashboard{orderedDashboards.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button
           onClick={onSwitchToBuilder}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-lego-blue hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+          className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 bg-lego-blue hover:bg-blue-700 text-white text-[11px] sm:text-xs font-semibold rounded-lg transition-colors shrink-0"
         >
-          <Plus size={14} /> New Dashboard
+          <Plus size={14} /> <span className="hidden sm:inline">New Dashboard</span><span className="sm:hidden">New</span>
         </button>
       </div>
 
@@ -1013,26 +1046,26 @@ function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBu
         >
           {/* Dashboard Header */}
           <div
-            className="flex items-center gap-3 p-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
+            className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
             onClick={() => setExpandedDash(expandedDash === dash.id ? null : dash.id)}
           >
-            <div className="cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-400 transition-colors">
+            <div className="cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-400 transition-colors hidden sm:block">
               <GripVertical size={16} />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-display font-semibold text-sm text-white truncate">{dash.name}</h3>
-              <p className="text-[10px] text-gray-500 mt-0.5">
+              <h3 className="font-display font-semibold text-xs sm:text-sm text-white truncate">{dash.name}</h3>
+              <p className="text-[9px] sm:text-[10px] text-gray-500 mt-0.5">
                 {dash.charts?.length || 0} chart{(dash.charts?.length || 0) !== 1 ? 's' : ''}
                 {dash.updated_at && (
-                  <span className="ml-2">
+                  <span className="ml-2 hidden sm:inline">
                     · Saved {new Date(dash.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>
                 )}
               </p>
             </div>
             <div className="flex items-center gap-1">
-              {/* Chart type thumbnails */}
-              <div className="flex gap-0.5 mr-2">
+              {/* Chart type thumbnails — hide on small mobile */}
+              <div className="hidden sm:flex gap-0.5 mr-2">
                 {(dash.charts || []).slice(0, 5).map((c, i) => {
                   const ChartIcon = { bar: BarIcon, line: LineIcon, area: BarChart3, pie: PieIcon }[c.chartType] || BarIcon
                   return <ChartIcon key={i} size={11} className="text-gray-600" />
@@ -1075,14 +1108,14 @@ function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBu
           {expandedDash === dash.id && (
             <div className="border-t border-lego-border/50">
               {(dash.charts || []).map((chart, cIdx) => (
-                <div key={chart.id || cIdx} className="p-5 border-b border-lego-border/30 last:border-b-0">
+                <div key={chart.id || cIdx} className="p-3 sm:p-5 border-b border-lego-border/30 last:border-b-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[9px] font-mono text-gray-600 bg-lego-surface2 px-1.5 py-0.5 rounded">
                       {cIdx + 1}/{dash.charts.length}
                     </span>
                   </div>
-                  <h4 className="font-display font-semibold text-sm mb-1 text-white">{chart.label}</h4>
-                  <p className="text-[10px] text-gray-500 mb-4">
+                  <h4 className="font-display font-semibold text-xs sm:text-sm mb-1 text-white">{chart.label}</h4>
+                  <p className="text-[9px] sm:text-[10px] text-gray-500 mb-3 sm:mb-4">
                     {AGG_FUNCTIONS.find(f => f.key === chart.agg)?.label} of {NUMERIC_FIELDS.find(f => f.key === chart.metric)?.label} grouped by {GROUP_BY_FIELDS.find(f => f.key === chart.groupBy)?.label}
                   </p>
                   <CustomChart config={chart} snapshots={chart.groupBy === 'scraped_date' ? snapshots : latestSnapshots} />
@@ -1100,9 +1133,9 @@ function SavedReportsTab({ snapshots, loading, savedDashboardsHook, onSwitchToBu
 
 function ChartCard({ title, subtitle, children }) {
   return (
-    <div className="glass rounded-xl p-5">
-      <h3 className="font-display font-semibold text-sm mb-0.5">{title}</h3>
-      {subtitle && <p className="text-[10px] text-gray-500 mb-4">{subtitle}</p>}
+    <div className="glass rounded-xl p-3 sm:p-5">
+      <h3 className="font-display font-semibold text-xs sm:text-sm mb-0.5">{title}</h3>
+      {subtitle && <p className="text-[9px] sm:text-[10px] text-gray-500 mb-3 sm:mb-4">{subtitle}</p>}
       {children}
     </div>
   )
@@ -1110,10 +1143,10 @@ function ChartCard({ title, subtitle, children }) {
 
 function KPI({ icon, label, value, color = 'text-white', small }) {
   return (
-    <div className="glass rounded-lg p-3.5 glass-hover transition-all">
-      <div className={`mb-1.5 ${color}`}>{icon}</div>
-      <div className={`font-display font-bold ${small ? 'text-sm' : 'text-xl'} ${color}`}>{value}</div>
-      <div className="text-[10px] text-gray-500 font-mono uppercase tracking-wider mt-0.5">{label}</div>
+    <div className="glass rounded-lg p-2.5 sm:p-3.5 glass-hover transition-all">
+      <div className={`mb-1 sm:mb-1.5 ${color}`}>{icon}</div>
+      <div className={`font-display font-bold ${small ? 'text-xs sm:text-sm' : 'text-lg sm:text-xl'} ${color}`}>{value}</div>
+      <div className="text-[9px] sm:text-[10px] text-gray-500 font-mono uppercase tracking-wider mt-0.5">{label}</div>
     </div>
   )
 }
@@ -1125,17 +1158,17 @@ function SparklineCard({ data, dataKey, label, color, fmt }) {
   const change = first > 0 ? ((latest - first) / first * 100) : 0
   const isUp = change > 0
   return (
-    <div className="glass rounded-xl p-4 glass-hover transition-all">
+    <div className="glass rounded-xl p-3 sm:p-4 glass-hover transition-all">
       <div className="flex items-center justify-between mb-1">
-        <div className="text-[10px] font-mono uppercase tracking-wider text-gray-500">{label}</div>
+        <div className="text-[9px] sm:text-[10px] font-mono uppercase tracking-wider text-gray-500">{label}</div>
         {data.length > 1 && change !== 0 && (
-          <span className={`text-[10px] font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+          <span className={`text-[9px] sm:text-[10px] font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
             {isUp ? '+' : ''}{change.toFixed(1)}%
           </span>
         )}
       </div>
-      <div className="font-display font-bold text-lg mb-2" style={{ color }}>{fmt(latest)}</div>
-      <div className="h-[60px]">
+      <div className="font-display font-bold text-base sm:text-lg mb-1.5 sm:mb-2" style={{ color }}>{fmt(latest)}</div>
+      <div className="h-[45px] sm:h-[60px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
@@ -1160,11 +1193,11 @@ function ThemeBarChart({ themes }) {
     .map(t => ({ name: t.theme?.length > 20 ? t.theme.slice(0, 20) + '…' : t.theme, count: Number(t.product_count) }))
   return (
     <ChartCard title="Products by Theme" subtitle="Top 15 themes">
-      <div className="h-[380px]">
+      <div className="h-[320px] sm:h-[380px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 5, right: 15 }}>
-            <XAxis type="number" tick={{ fill: '#555', fontSize: 10 }} />
-            <YAxis type="category" dataKey="name" width={130} tick={{ fill: '#888', fontSize: 10, fontFamily: 'DM Sans' }} />
+            <XAxis type="number" tick={{ fill: '#555', fontSize: 9 }} />
+            <YAxis type="category" dataKey="name" width={110} tick={{ fill: '#888', fontSize: 9, fontFamily: 'DM Sans' }} />
             <Tooltip contentStyle={TOOLTIP_STYLE} />
             <Bar dataKey="count" fill="#E3000B" radius={[0, 4, 4, 0]} />
           </BarChart>
@@ -1180,14 +1213,14 @@ function AvailabilityPie({ themes }) {
   const data = [{ name: 'In Stock', value: inStock }, { name: 'Out of Stock', value: total - inStock }]
   return (
     <ChartCard title="Stock Availability" subtitle="Across all tracked products">
-      <div className="h-[250px]">
+      <div className="h-[200px] sm:h-[250px]">
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart><Pie data={data} cx="50%" cy="50%" innerRadius={55} outerRadius={95} dataKey="value" stroke="none">
+          <PieChart><Pie data={data} cx="50%" cy="50%" innerRadius={45} outerRadius={80} dataKey="value" stroke="none">
             <Cell fill="#34d399" /><Cell fill="#f87171" />
           </Pie><Tooltip contentStyle={TOOLTIP_STYLE} /></PieChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex justify-center gap-6 mt-2">
+      <div className="flex justify-center gap-4 sm:gap-6 mt-2">
         <LegendDot color="bg-green-400" label={`In Stock (${inStock})`} />
         <LegendDot color="bg-red-400" label={`Out of Stock (${total - inStock})`} />
       </div>
@@ -1197,25 +1230,25 @@ function AvailabilityPie({ themes }) {
 
 function MostExpensiveSetsChart({ products }) {
   const data = products.slice(0, 20).map(p => ({
-    name: (p.product_name || `Set ${p.product_code}`).slice(0, 30),
+    name: (p.product_name || `Set ${p.product_code}`).slice(0, 25),
     price: Number(p.price_usd),
     pieces: Number(p.piece_count) || 0,
     theme: p.theme || 'Unknown'
   }))
   return (
     <ChartCard title="Most Expensive Sets" subtitle="Top 20 by retail price">
-      <div className="h-[420px]">
+      <div className="h-[360px] sm:h-[420px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 5, right: 15 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" />
-            <XAxis type="number" tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${v}`} />
-            <YAxis type="category" dataKey="name" width={190} tick={{ fill: '#888', fontSize: 9 }} />
+            <XAxis type="number" tick={{ fill: '#555', fontSize: 9 }} tickFormatter={v => `$${v}`} />
+            <YAxis type="category" dataKey="name" width={150} tick={{ fill: '#888', fontSize: 8 }} />
             <Tooltip contentStyle={TOOLTIP_STYLE}
               content={({ active, payload }) => {
                 if (!active || !payload?.[0]) return null
                 const d = payload[0].payload
                 return (
-                  <div className="glass rounded-lg p-3 border border-lego-border text-xs">
+                  <div className="glass rounded-lg p-2 sm:p-3 border border-lego-border text-[10px] sm:text-xs">
                     <div className="text-white font-semibold mb-1">{d.name}</div>
                     <div className="text-lego-yellow font-bold">${d.price.toFixed(2)}</div>
                     <div className="text-gray-400">{d.pieces.toLocaleString()} pieces • {d.theme}</div>
@@ -1232,14 +1265,14 @@ function MostExpensiveSetsChart({ products }) {
 
 function PriceByThemeChart({ themes }) {
   const data = themes.filter(t => t.theme && t.avg_price).sort((a, b) => Number(b.avg_price) - Number(a.avg_price)).slice(0, 12)
-    .map(t => ({ name: t.theme?.length > 18 ? t.theme.slice(0, 18) + '…' : t.theme, avg: Number(Number(t.avg_price).toFixed(0)) }))
+    .map(t => ({ name: t.theme?.length > 15 ? t.theme.slice(0, 15) + '…' : t.theme, avg: Number(Number(t.avg_price).toFixed(0)) }))
   return (
     <ChartCard title="Avg Price by Theme" subtitle="Top 12 most expensive">
-      <div className="h-[320px]">
+      <div className="h-[280px] sm:h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ bottom: 60 }}>
-            <XAxis dataKey="name" tick={{ fill: '#888', fontSize: 9 }} angle={-45} textAnchor="end" interval={0} />
-            <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${v}`} />
+            <XAxis dataKey="name" tick={{ fill: '#888', fontSize: 8 }} angle={-45} textAnchor="end" interval={0} />
+            <YAxis tick={{ fill: '#555', fontSize: 9 }} tickFormatter={v => `$${v}`} width={40} />
             <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`$${v}`]} />
             <Bar dataKey="avg" fill="#FFD500" radius={[4, 4, 0, 0]} />
           </BarChart>
@@ -1252,15 +1285,15 @@ function PriceByThemeChart({ themes }) {
 function PricePerPieceChart({ themes }) {
   const data = themes.filter(t => t.theme && t.avg_price_per_piece && Number(t.avg_price_per_piece) < 1)
     .sort((a, b) => Number(a.avg_price_per_piece) - Number(b.avg_price_per_piece)).slice(0, 12)
-    .map(t => ({ name: t.theme?.length > 18 ? t.theme.slice(0, 18) + '…' : t.theme, ppp: Number(Number(t.avg_price_per_piece).toFixed(3)) }))
+    .map(t => ({ name: t.theme?.length > 15 ? t.theme.slice(0, 15) + '…' : t.theme, ppp: Number(Number(t.avg_price_per_piece).toFixed(3)) }))
   if (!data.length) return null
   return (
     <ChartCard title="Avg Price/Piece by Theme" subtitle="Best value themes">
-      <div className="h-[320px]">
+      <div className="h-[280px] sm:h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ bottom: 60 }}>
-            <XAxis dataKey="name" tick={{ fill: '#888', fontSize: 9 }} angle={-45} textAnchor="end" interval={0} />
-            <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${v}`} />
+            <XAxis dataKey="name" tick={{ fill: '#888', fontSize: 8 }} angle={-45} textAnchor="end" interval={0} />
+            <YAxis tick={{ fill: '#555', fontSize: 9 }} tickFormatter={v => `$${v}`} width={40} />
             <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`$${v}`]} />
             <Bar dataKey="ppp" fill="#006CB7" radius={[4, 4, 0, 0]} />
           </BarChart>
@@ -1273,22 +1306,22 @@ function PricePerPieceChart({ themes }) {
 function BestValueTable({ products }) {
   return (
     <ChartCard title="Best Value Sets" subtitle="Lowest price per piece (in stock)">
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+      <div className="overflow-x-auto -mx-1">
+        <table className="w-full text-[10px] sm:text-xs">
           <thead><tr className="border-b border-lego-border">
-            <th className="text-left py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">#</th>
-            <th className="text-left py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">Set</th>
-            <th className="text-right py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">Price</th>
-            <th className="text-right py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">Pcs</th>
-            <th className="text-right py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">$/Pc</th>
+            <th className="text-left py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">#</th>
+            <th className="text-left py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">Set</th>
+            <th className="text-right py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">Price</th>
+            <th className="text-right py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">Pcs</th>
+            <th className="text-right py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">$/Pc</th>
           </tr></thead>
           <tbody>{products.slice(0, 10).map((p, i) => (
             <tr key={p.product_code} className="border-b border-lego-border/30 hover:bg-white/[0.02]">
-              <td className="py-2 px-2 text-gray-600">{i + 1}</td>
-              <td className="py-2 px-2"><span className="text-white">{p.product_name}</span><br /><span className="text-[10px] text-gray-600">{p.theme}</span></td>
-              <td className="py-2 px-2 text-right font-mono text-lego-yellow">${Number(p.price_usd).toFixed(2)}</td>
-              <td className="py-2 px-2 text-right font-mono text-gray-400">{Number(p.piece_count).toLocaleString()}</td>
-              <td className="py-2 px-2 text-right font-mono text-green-400 font-semibold">${Number(p.price_per_piece).toFixed(3)}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-gray-600">{i + 1}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2"><span className="text-white">{p.product_name}</span><br /><span className="text-[9px] sm:text-[10px] text-gray-600">{p.theme}</span></td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-lego-yellow">${Number(p.price_usd).toFixed(2)}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-gray-400">{Number(p.piece_count).toLocaleString()}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-green-400 font-semibold">${Number(p.price_per_piece).toFixed(3)}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -1300,20 +1333,20 @@ function BestValueTable({ products }) {
 function NewProductsTable({ products }) {
   return (
     <ChartCard title="Latest Products" subtitle="Recently added to the catalog">
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+      <div className="overflow-x-auto -mx-1">
+        <table className="w-full text-[10px] sm:text-xs">
           <thead><tr className="border-b border-lego-border">
-            <th className="text-left py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">Set</th>
-            <th className="text-left py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">Theme</th>
-            <th className="text-right py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">Price</th>
-            <th className="text-right py-2 px-2 text-[10px] font-mono text-gray-500 uppercase">Rating</th>
+            <th className="text-left py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">Set</th>
+            <th className="text-left py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">Theme</th>
+            <th className="text-right py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">Price</th>
+            <th className="text-right py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase">Rating</th>
           </tr></thead>
           <tbody>{products.slice(0, 10).map(p => (
             <tr key={p.product_code} className="border-b border-lego-border/30 hover:bg-white/[0.02]">
-              <td className="py-2 px-2 text-white">{p.product_name}</td>
-              <td className="py-2 px-2 text-gray-500">{p.theme}</td>
-              <td className="py-2 px-2 text-right font-mono text-lego-yellow">${Number(p.price_usd).toFixed(2)}</td>
-              <td className="py-2 px-2 text-right">{p.rating ? <span className="flex items-center justify-end gap-0.5"><Star size={10} className="text-lego-yellow fill-lego-yellow" />{Number(p.rating).toFixed(1)}</span> : '—'}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-white">{p.product_name}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-gray-500">{p.theme}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-lego-yellow">${Number(p.price_usd).toFixed(2)}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right">{p.rating ? <span className="flex items-center justify-end gap-0.5"><Star size={9} className="text-lego-yellow fill-lego-yellow" />{Number(p.rating).toFixed(1)}</span> : '—'}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -1326,24 +1359,24 @@ function ThemeComparisonTable({ themes }) {
   const data = themes.filter(t => t.theme).slice(0, 20)
   return (
     <ChartCard title="Theme Comparison" subtitle="Head-to-head stats across all themes">
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+      <div className="overflow-x-auto -mx-1">
+        <table className="w-full text-[10px] sm:text-xs">
           <thead><tr className="border-b border-lego-border">
             {['Theme', 'Sets', 'Avg $', 'Min $', 'Max $', 'Avg Rating', 'In Stock', 'On Sale', '$/Piece'].map(h => (
-              <th key={h} className="py-2 px-2 text-[10px] font-mono text-gray-500 uppercase text-right first:text-left">{h}</th>
+              <th key={h} className="py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase text-right first:text-left whitespace-nowrap">{h}</th>
             ))}
           </tr></thead>
           <tbody>{data.map(t => (
             <tr key={t.theme} className="border-b border-lego-border/30 hover:bg-white/[0.02]">
-              <td className="py-2 px-2 text-white font-medium text-left">{t.theme}</td>
-              <td className="py-2 px-2 text-right font-mono">{t.product_count}</td>
-              <td className="py-2 px-2 text-right font-mono text-lego-yellow">${Number(t.avg_price).toFixed(0)}</td>
-              <td className="py-2 px-2 text-right font-mono text-gray-400">${Number(t.min_price).toFixed(0)}</td>
-              <td className="py-2 px-2 text-right font-mono text-gray-400">${Number(t.max_price).toFixed(0)}</td>
-              <td className="py-2 px-2 text-right font-mono">{t.avg_rating ? Number(t.avg_rating).toFixed(1) : '—'}</td>
-              <td className="py-2 px-2 text-right font-mono text-green-400">{t.in_stock_count}</td>
-              <td className="py-2 px-2 text-right font-mono text-lego-red">{t.on_sale_count}</td>
-              <td className="py-2 px-2 text-right font-mono text-lego-blue">{t.avg_price_per_piece ? `$${Number(t.avg_price_per_piece).toFixed(2)}` : '—'}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-white font-medium text-left whitespace-nowrap">{t.theme}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono">{t.product_count}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-lego-yellow">${Number(t.avg_price).toFixed(0)}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-gray-400">${Number(t.min_price).toFixed(0)}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-gray-400">${Number(t.max_price).toFixed(0)}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono">{t.avg_rating ? Number(t.avg_rating).toFixed(1) : '—'}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-green-400">{t.in_stock_count}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-lego-red">{t.on_sale_count}</td>
+              <td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-lego-blue">{t.avg_price_per_piece ? `$${Number(t.avg_price_per_piece).toFixed(2)}` : '—'}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -1353,7 +1386,7 @@ function ThemeComparisonTable({ themes }) {
 }
 
 function LegendDot({ color, label }) {
-  return <div className="flex items-center gap-2 text-[10px]"><div className={`w-2.5 h-2.5 rounded-full ${color}`} /><span className="text-gray-400">{label}</span></div>
+  return <div className="flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px]"><div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${color}`} /><span className="text-gray-400">{label}</span></div>
 }
 
 function fmtDate(d) {
@@ -1364,36 +1397,17 @@ function fmtDate(d) {
 function fmtDateLong(d) {
   return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : ''
 }
-function LoadingSkeleton() { return (<div className="space-y-5">{[1, 2, 3].map(i => (<div key={i} className="glass rounded-xl p-5 animate-pulse"><div className="h-4 bg-lego-surface2 rounded w-48 mb-2" /><div className="h-3 bg-lego-surface2 rounded w-32 mb-4" /><div className="h-[200px] bg-lego-surface2 rounded" /></div>))}</div>) }
+function LoadingSkeleton() { return (<div className="space-y-4 sm:space-y-5">{[1, 2, 3].map(i => (<div key={i} className="glass rounded-xl p-3 sm:p-5 animate-pulse"><div className="h-4 bg-lego-surface2 rounded w-48 mb-2" /><div className="h-3 bg-lego-surface2 rounded w-32 mb-4" /><div className="h-[180px] sm:h-[200px] bg-lego-surface2 rounded" /></div>))}</div>) }
 
 /* ========================= MARKET ACTIVITY TABS (moved from Alerts) ========================= */
-
-function MarketPriceSwingsTab({ swings }) {
-  const [filter, setFilter] = useState('all')
-  const filtered = useMemo(() => { if (filter === 'drops') return swings.filter(s => s.direction === 'down'); if (filter === 'increases') return swings.filter(s => s.direction === 'up'); return swings.filter(s => s.direction !== 'flat') }, [swings, filter])
-  const chartData = filtered.slice(0, 20).map(s => ({ name: (s.product_name || '').slice(0, 25), change: Number(s.changePct.toFixed(1)) }))
-  return (
-    <div className="space-y-5">
-      <div className="flex gap-2 flex-wrap">
-        {['all', 'drops', 'increases'].map(f => (<button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filter === f ? 'bg-lego-red text-white' : 'glass text-gray-400 hover:text-white'}`}>{f === 'all' ? 'All Changes' : f === 'drops' ? 'Price Drops' : 'Price Increases'}</button>))}
-      </div>
-      {chartData.length > 0 && <ChartCard title="Top Price Swings by %"><div style={{ height: Math.max(300, chartData.length * 28) }}><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData} layout="vertical" margin={{ left: 5, right: 15 }}><CartesianGrid strokeDasharray="3 3" stroke="#2A2A3D" /><XAxis type="number" tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `${v}%`} /><YAxis type="category" dataKey="name" width={170} tick={{ fill: '#888', fontSize: 9 }} /><Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => [`${v}%`]} /><Bar dataKey="change" fill="#FFD500" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer></div></ChartCard>}
-      <ChartCard title="Details" subtitle={`${filtered.length} products`}>
-        <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="border-b border-lego-border">{['Product', 'Theme', 'From', 'To', 'Change'].map(h => <th key={h} className="py-2 px-2 text-[10px] font-mono text-gray-500 uppercase text-right first:text-left [&:nth-child(2)]:text-left">{h}</th>)}</tr></thead><tbody>
-          {filtered.slice(0, 30).map(s => (<tr key={s.product_code} className="border-b border-lego-border/30 hover:bg-white/[0.02]"><td className="py-2 px-2 text-left"><Link to={`/product/${s.slug}`} className="text-white hover:text-lego-yellow font-medium">{s.product_name}</Link></td><td className="py-2 px-2 text-left text-gray-500">{s.theme}</td><td className="py-2 px-2 text-right font-mono text-gray-400">${s.firstPrice.toFixed(2)}</td><td className="py-2 px-2 text-right font-mono text-lego-yellow">${s.lastPrice.toFixed(2)}</td><td className={`py-2 px-2 text-right font-mono font-bold ${s.direction === 'down' ? 'text-green-400' : 'text-red-400'}`}>{s.direction === 'down' ? '-' : '+'}${s.absChange.toFixed(2)} ({s.absPct.toFixed(1)}%)</td></tr>))}
-        </tbody></table></div>
-      </ChartCard>
-    </div>
-  )
-}
 
 
 function MarketSalesTab({ sales }) {
   return (
-    <div className="space-y-5">
-      <div className="glass rounded-xl p-4"><div className="flex items-center gap-2 text-sm"><Flame size={16} className="text-lego-red" /><span className="text-white font-semibold">{sales.length} products</span><span className="text-gray-500">recently went on sale</span></div></div>
-      <ChartCard title="New Sales"><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="border-b border-lego-border">{['Product', 'Theme', 'Was', 'Now', 'Save', 'Date'].map(h => <th key={h} className="py-2 px-2 text-[10px] font-mono text-gray-500 uppercase text-right first:text-left [&:nth-child(2)]:text-left">{h}</th>)}</tr></thead><tbody>
-        {sales.map((s, i) => (<tr key={`${s.product_code}-${i}`} className="border-b border-lego-border/30 hover:bg-white/[0.02]"><td className="py-2 px-2 text-left"><Link to={`/product/${s.slug}`} className="text-white hover:text-lego-yellow font-medium">{s.product_name}</Link></td><td className="py-2 px-2 text-left text-gray-500">{s.theme}</td><td className="py-2 px-2 text-right font-mono text-gray-400 line-through">${s.listPrice.toFixed(2)}</td><td className="py-2 px-2 text-right font-mono text-lego-yellow font-bold">${s.price.toFixed(2)}</td><td className="py-2 px-2 text-right font-mono text-lego-red font-bold">-${s.discount.toFixed(0)}{s.salePct > 0 && <span className="text-gray-500 font-normal ml-1">({s.salePct.toFixed(0)}%)</span>}</td><td className="py-2 px-2 text-right text-gray-500">{fmtDate(s.date)}</td></tr>))}
+    <div className="space-y-4 sm:space-y-5">
+      <div className="glass rounded-xl p-3 sm:p-4"><div className="flex items-center gap-2 text-xs sm:text-sm"><Flame size={16} className="text-lego-red" /><span className="text-white font-semibold">{sales.length} products</span><span className="text-gray-500">recently went on sale</span></div></div>
+      <ChartCard title="New Sales"><div className="overflow-x-auto -mx-1"><table className="w-full text-[10px] sm:text-xs"><thead><tr className="border-b border-lego-border">{['Product', 'Theme', 'Was', 'Now', 'Save', 'Date'].map(h => <th key={h} className="py-2 px-1.5 sm:px-2 text-[9px] sm:text-[10px] font-mono text-gray-500 uppercase text-right first:text-left [&:nth-child(2)]:text-left whitespace-nowrap">{h}</th>)}</tr></thead><tbody>
+        {sales.map((s, i) => (<tr key={`${s.product_code}-${i}`} className="border-b border-lego-border/30 hover:bg-white/[0.02]"><td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-left"><Link to={`/product/${s.slug}`} className="text-white hover:text-lego-yellow font-medium">{s.product_name}</Link></td><td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-left text-gray-500">{s.theme}</td><td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-gray-400 line-through">${s.listPrice.toFixed(2)}</td><td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-lego-yellow font-bold">${s.price.toFixed(2)}</td><td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right font-mono text-lego-red font-bold">-${s.discount.toFixed(0)}{s.salePct > 0 && <span className="text-gray-500 font-normal ml-1">({s.salePct.toFixed(0)}%)</span>}</td><td className="py-1.5 sm:py-2 px-1.5 sm:px-2 text-right text-gray-500 whitespace-nowrap">{fmtDate(s.date)}</td></tr>))}
       </tbody></table></div></ChartCard>
     </div>
   )

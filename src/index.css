@@ -14,6 +14,8 @@
   ::-webkit-scrollbar-thumb { background: #2A2A3D; border-radius: 3px; }
 }
 
+
+
 @layer components {
   .glass {
     background: rgba(22, 22, 31, 0.7);

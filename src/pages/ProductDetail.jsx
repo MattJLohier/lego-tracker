@@ -360,7 +360,7 @@ export default function ProductDetail() {
   }, [slug, product?.product_name])
 
   if (loading) return (
-    <main className="pt-20 pb-16 px-6 min-h-screen">
+    <main className="pt-16 sm:pt-20 pb-12 sm:pb-16 px-3 sm:px-6 min-h-screen">
       <SEO
         title="Loading set..."
         description="Loading LEGO set details on StudMetrics."
@@ -380,7 +380,7 @@ export default function ProductDetail() {
   )
 
   if (!product) return (
-    <main className="pt-20 pb-16 px-6 min-h-screen flex items-center justify-center">
+    <main className="pt-16 sm:pt-20 pb-12 sm:pb-16 px-3 sm:px-6 min-h-screen flex items-center justify-center">
       <SEO
         title="Set Not Found"
         description="This LEGO set could not be found on StudMetrics."
@@ -423,11 +423,11 @@ export default function ProductDetail() {
   }))
 
   return (
-    <main className="pt-20 pb-16 px-4 sm:px-6 min-h-screen">
+    <main className="pt-16 sm:pt-20 pb-12 sm:pb-16 px-3 sm:px-6 min-h-screen">
       <ProductSEO product={product} slug={slug} priceStats={priceStats} />
 
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
           <Link to="/explore" className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors">
             <ArrowLeft size={14} /> Back to Explorer
           </Link>
@@ -439,10 +439,73 @@ export default function ProductDetail() {
           )}
         </div>
 
-        <div className="grid lg:grid-cols-5 gap-8">
-          {/* Left: image + quick stats */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="glass rounded-xl aspect-square flex items-center justify-center relative overflow-hidden">
+        {/* ═══ MOBILE HERO: Image + Title + Price (visible < lg only) ═══ */}
+        <div className="lg:hidden mb-5">
+          {/* Compact image + title row */}
+          <div className="flex gap-3 mb-3">
+            <div className="glass rounded-xl w-28 h-28 shrink-0 flex items-center justify-center relative overflow-hidden">
+              {imageUrl ? (
+                <img src={imageUrl} alt={`LEGO ${product_name || 'Set'} ${product_code}`}
+                  className="max-h-full max-w-full object-contain p-2"
+                  onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; e.target.parentElement.querySelector('.fallback-code')?.style && (e.target.parentElement.querySelector('.fallback-code').style.display = 'block') }}
+                />
+              ) : null}
+              <div className={`fallback-code text-3xl font-display font-bold text-gray-700/20${imageUrl ? ' hidden' : ''}`}>{product_code}</div>
+              <div className="absolute top-1.5 left-1.5 flex flex-col gap-1">
+                {is_new && <span className="px-1.5 py-0.5 bg-lego-blue text-white text-[8px] font-bold uppercase rounded-full">New</span>}
+                {on_sale && <span className="px-1.5 py-0.5 bg-lego-red text-white text-[8px] font-bold uppercase rounded-full">Sale</span>}
+              </div>
+              {user && (
+                <button onClick={() => toggleFavorite(product_code, slug)}
+                  className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 transition-all">
+                  <Heart size={14} className={isFavorite(product_code) ? 'fill-lego-red text-lego-red' : 'text-white/60'} />
+                </button>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              {theme && <p className="text-[10px] font-mono uppercase tracking-wider text-gray-500">{theme}</p>}
+              <h1 className="font-display font-bold text-lg leading-tight line-clamp-2">{product_name}</h1>
+              <div className="flex items-baseline gap-2 mt-1.5">
+                <span className="font-display font-bold text-2xl text-lego-yellow">${currentPrice.toFixed(2)}</span>
+                {hasDiscount && <span className="text-xs text-gray-500 line-through">${Number(list_price_usd).toFixed(2)}</span>}
+                {hasDiscount && <span className="px-1.5 py-0.5 bg-lego-red/20 text-lego-red text-[10px] font-bold rounded-full">−{Number(sale_percentage).toFixed(0)}%</span>}
+              </div>
+              {retailerCards.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-lego-surface2 text-gray-400 text-[9px] font-mono rounded-full mt-1 inline-block">
+                  {retailerCards.length + 1} sources
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Quick info row */}
+          <div className="glass rounded-xl p-3 mb-3">
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div>
+                <div className="text-[9px] font-mono text-gray-500 uppercase">Pieces</div>
+                <div className="text-xs font-semibold">{piece_count ? Number(piece_count).toLocaleString() : '—'}</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-mono text-gray-500 uppercase">$/Piece</div>
+                <div className="text-xs font-semibold">{price_per_piece && Number(price_per_piece) < 50 ? `$${Number(price_per_piece).toFixed(3)}` : '—'}</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-mono text-gray-500 uppercase">Rating</div>
+                <div className="text-xs font-semibold">{rating ? `${Number(rating).toFixed(1)}` : '—'}</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-mono text-gray-500 uppercase">Age</div>
+                <div className="text-xs font-semibold">{age_range || '—'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-5 gap-5 lg:gap-8">
+          {/* ═══ LEFT SIDEBAR (hidden on mobile — replaced by hero above) ═══ */}
+          <div className="lg:col-span-2 space-y-3 sm:space-y-4 order-2 lg:order-1">
+            {/* Full image — desktop only */}
+            <div className="hidden lg:flex glass rounded-xl aspect-square items-center justify-center relative overflow-hidden">
               {imageUrl ? (
                 <img src={imageUrl} alt={`LEGO ${product_name || 'Set'} ${product_code} — ${theme || 'product'} box and pieces`}
                   className="max-h-full max-w-full object-contain drop-shadow-lg p-4"
@@ -473,24 +536,24 @@ export default function ProductDetail() {
 
             {/* Price statistics card */}
             {priceStats && priceStats.dataPoints > 1 && (
-              <div className="glass rounded-xl p-4">
+              <div className="glass rounded-xl p-3 sm:p-4">
                 <h3 className="font-display font-semibold text-xs mb-3 flex items-center gap-1.5">
                   <BarChart3 size={13} className="text-lego-yellow" /> Price Statistics
                 </h3>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   <div>
                     <div className="text-[9px] font-mono text-gray-500 uppercase">Low</div>
-                    <div className="text-sm font-bold text-green-400">${priceStats.min.toFixed(2)}</div>
+                    <div className="text-xs sm:text-sm font-bold text-green-400">${priceStats.min.toFixed(2)}</div>
                     {priceStats.minDate && <div className="text-[9px] text-gray-600">{new Date(priceStats.minDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}</div>}
                   </div>
                   <div>
                     <div className="text-[9px] font-mono text-gray-500 uppercase">Average</div>
-                    <div className="text-sm font-bold text-lego-yellow">${priceStats.avg.toFixed(2)}</div>
+                    <div className="text-xs sm:text-sm font-bold text-lego-yellow">${priceStats.avg.toFixed(2)}</div>
                     <div className="text-[9px] text-gray-600">{priceStats.dataPoints} data pts</div>
                   </div>
                   <div>
                     <div className="text-[9px] font-mono text-gray-500 uppercase">High</div>
-                    <div className="text-sm font-bold text-red-400">${priceStats.max.toFixed(2)}</div>
+                    <div className="text-xs sm:text-sm font-bold text-red-400">${priceStats.max.toFixed(2)}</div>
                     {priceStats.maxDate && <div className="text-[9px] text-gray-600">{new Date(priceStats.maxDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}</div>}
                   </div>
                 </div>
@@ -516,7 +579,7 @@ export default function ProductDetail() {
 
             {/* ── Retailer Price Cards (left sidebar) ── */}
             {retailerCards.length > 0 && (
-              <div className="glass rounded-xl p-4">
+              <div className="glass rounded-xl p-3 sm:p-4">
                 <h3 className="font-display font-semibold text-xs mb-3 flex items-center gap-1.5">
                   <Store size={13} className="text-lego-blue" /> Where to Buy
                 </h3>
@@ -526,7 +589,7 @@ export default function ProductDetail() {
                   <div className="mb-3 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20">
                     <div className="text-[9px] font-mono text-green-400 uppercase tracking-wider mb-0.5">Best Price</div>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-lg font-bold text-green-400">${bestPrice.price.toFixed(2)}</span>
+                      <span className="text-base sm:text-lg font-bold text-green-400">${bestPrice.price.toFixed(2)}</span>
                       <span className="text-[10px] text-gray-400">at {RETAILER_CONFIG[bestPrice.source]?.label}</span>
                     </div>
                   </div>
@@ -568,9 +631,10 @@ export default function ProductDetail() {
             )}
           </div>
 
-          {/* Right: details */}
-          <div className="lg:col-span-3 space-y-6">
-            <div className="flex items-start justify-between gap-3">
+          {/* ═══ RIGHT: details ═══ */}
+          <div className="lg:col-span-3 space-y-4 sm:space-y-6 order-1 lg:order-2">
+            {/* Title + price — desktop only (mobile uses hero above) */}
+            <div className="hidden lg:flex items-start justify-between gap-3">
               <div>
                 {theme && <p className="text-xs font-mono uppercase tracking-wider text-gray-500">{theme}</p>}
                 <h1 className="font-display font-bold text-2xl sm:text-3xl leading-tight">{product_name}</h1>
@@ -583,8 +647,8 @@ export default function ProductDetail() {
               )}
             </div>
 
-            {/* Price block */}
-            <div className="glass rounded-xl p-5">
+            {/* Price block — desktop only */}
+            <div className="hidden lg:block glass rounded-xl p-5">
               <div className="flex items-baseline gap-3 mb-3">
                 <span className="font-display font-bold text-3xl text-lego-yellow">${currentPrice.toFixed(2)}</span>
                 {hasDiscount && <span className="text-base text-gray-500 line-through">${Number(list_price_usd).toFixed(2)}</span>}
@@ -606,18 +670,18 @@ export default function ProductDetail() {
 
             {/* Price change since listed */}
             {history.length > 1 && (
-              <div className="glass rounded-xl p-5">
-                <h3 className="font-display font-semibold text-sm mb-3">Price Change Since First Tracked</h3>
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className={`flex items-center gap-1 text-xl font-display font-bold
+              <div className="glass rounded-xl p-3 sm:p-5">
+                <h3 className="font-display font-semibold text-xs sm:text-sm mb-2 sm:mb-3">Price Change Since First Tracked</h3>
+                <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                  <div className={`flex items-center gap-1 text-lg sm:text-xl font-display font-bold
                     ${priceChange > 0 ? 'text-red-400' : priceChange < 0 ? 'text-green-400' : 'text-gray-400'}`}>
-                    {priceChange > 0 ? <TrendingUp size={20} /> : priceChange < 0 ? <TrendingDown size={20} /> : <Minus size={20} />}
+                    {priceChange > 0 ? <TrendingUp size={18} /> : priceChange < 0 ? <TrendingDown size={18} /> : <Minus size={18} />}
                     {priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}
                   </div>
-                  <span className={`text-sm font-mono ${priceChange > 0 ? 'text-red-400' : priceChange < 0 ? 'text-green-400' : 'text-gray-400'}`}>
+                  <span className={`text-xs sm:text-sm font-mono ${priceChange > 0 ? 'text-red-400' : priceChange < 0 ? 'text-green-400' : 'text-gray-400'}`}>
                     ({priceChangePct > 0 ? '+' : ''}{priceChangePct}%)
                   </span>
-                  <span className="text-xs text-gray-500">from ${firstPrice.toFixed(2)} → ${currentPrice.toFixed(2)}</span>
+                  <span className="text-[10px] sm:text-xs text-gray-500">from ${firstPrice.toFixed(2)} → ${currentPrice.toFixed(2)}</span>
                 </div>
               </div>
             )}
@@ -626,11 +690,11 @@ export default function ProductDetail() {
                 PRICE HISTORY CHART — multi-source when retailers exist
                ══════════════════════════════════════════════════════════ */}
             {chartData.length > 1 && (
-              <div className="glass rounded-xl p-5">
+              <div className="glass rounded-xl p-3 sm:p-5">
                 <div className="flex items-start justify-between mb-1">
                   <div>
-                    <h3 className="font-display font-semibold text-sm">Price History</h3>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
+                    <h3 className="font-display font-semibold text-xs sm:text-sm">Price History</h3>
+                    <p className="text-[9px] sm:text-[10px] text-gray-500 mt-0.5">
                       {hasMultipleSources
                         ? `${multiSourceChartData.length} data points · ${activeSources.length} sources tracked`
                         : `${chartData.length} data points tracked`}
@@ -641,7 +705,7 @@ export default function ProductDetail() {
 
                 {/* Source toggle pills (only when multiple sources) */}
                 {hasMultipleSources && (
-                  <div className="flex flex-wrap gap-1.5 mb-4 mt-2">
+                  <div className="flex flex-wrap gap-1.5 mb-3 sm:mb-4 mt-2">
                     {activeSources.map(source => {
                       const cfg = RETAILER_CONFIG[source]
                       const enabled = enabledLines[source]
@@ -649,14 +713,14 @@ export default function ProductDetail() {
                         <button
                           key={source}
                           onClick={() => toggleLine(source)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all border ${
+                          className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-semibold transition-all border ${
                             enabled
                               ? 'border-transparent'
                               : 'border-lego-border opacity-40 bg-transparent'
                           }`}
                           style={enabled ? { backgroundColor: cfg.color + '20', color: cfg.color, borderColor: cfg.color + '40' } : {}}
                         >
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: enabled ? cfg.color : '#555' }} />
+                          <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full" style={{ backgroundColor: enabled ? cfg.color : '#555' }} />
                           {cfg.label}
                         </button>
                       )
@@ -664,14 +728,14 @@ export default function ProductDetail() {
                   </div>
                 )}
 
-                <div className="h-[280px]">
+                <div className="h-[220px] sm:h-[280px]">
                   <ResponsiveContainer width="100%" height="100%">
                     {hasMultipleSources ? (
                       /* ── Multi-source line chart ── */
                       <LineChart data={multiSourceChartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2A" />
-                        <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 10 }} />
-                        <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${v}`}
+                        <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 9 }} interval="preserveStartEnd" />
+                        <YAxis tick={{ fill: '#555', fontSize: 9 }} tickFormatter={v => `$${v}`} width={45}
                           domain={[
                             (allSourcePriceStats?.min || 0) * 0.95,
                             (allSourcePriceStats?.max || 100) * 1.05
@@ -681,17 +745,17 @@ export default function ProductDetail() {
                           content={({ active, payload, label }) => {
                             if (!active || !payload?.length) return null
                             return (
-                              <div className="glass rounded-lg p-3 border border-lego-border text-xs min-w-[160px]">
-                                <div className="text-white font-semibold mb-2">{label}</div>
+                              <div className="glass rounded-lg p-2 sm:p-3 border border-lego-border text-[10px] sm:text-xs min-w-[140px] sm:min-w-[160px]">
+                                <div className="text-white font-semibold mb-1.5 sm:mb-2">{label}</div>
                                 {payload
                                   .filter(p => p.value != null)
                                   .sort((a, b) => a.value - b.value)
                                   .map(p => {
                                     const cfg = RETAILER_CONFIG[p.dataKey]
                                     return (
-                                      <div key={p.dataKey} className="flex items-center justify-between gap-3 py-0.5">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cfg?.color }} />
+                                      <div key={p.dataKey} className="flex items-center justify-between gap-2 sm:gap-3 py-0.5">
+                                        <div className="flex items-center gap-1 sm:gap-1.5">
+                                          <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full" style={{ backgroundColor: cfg?.color }} />
                                           <span className="text-gray-400">{cfg?.label}</span>
                                         </div>
                                         <span className="font-bold" style={{ color: cfg?.color }}>${p.value.toFixed(2)}</span>
@@ -712,8 +776,8 @@ export default function ProductDetail() {
                               dataKey={source}
                               stroke={cfg.stroke}
                               strokeWidth={source === 'lego' ? 2.5 : 1.8}
-                              dot={{ fill: cfg.color, r: 2.5, strokeWidth: 0 }}
-                              activeDot={{ r: 5, strokeWidth: 2, stroke: '#16161F' }}
+                              dot={{ fill: cfg.color, r: 2, strokeWidth: 0 }}
+                              activeDot={{ r: 4, strokeWidth: 2, stroke: '#16161F' }}
                               connectNulls={true}
                               strokeDasharray={source === 'lego' ? undefined : undefined}
                             />
@@ -730,14 +794,14 @@ export default function ProductDetail() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2A" />
-                        <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 10 }} />
-                        <YAxis tick={{ fill: '#555', fontSize: 10 }} tickFormatter={v => `$${v}`} domain={['dataMin - 5', 'dataMax + 5']} />
+                        <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 9 }} interval="preserveStartEnd" />
+                        <YAxis tick={{ fill: '#555', fontSize: 9 }} tickFormatter={v => `$${v}`} width={45} domain={['dataMin - 5', 'dataMax + 5']} />
                         <Tooltip contentStyle={TOOLTIP_STYLE}
                           content={({ active, payload }) => {
                             if (!active || !payload?.[0]) return null
                             const d = payload[0].payload
                             return (
-                              <div className="glass rounded-lg p-3 border border-lego-border text-xs">
+                              <div className="glass rounded-lg p-2 sm:p-3 border border-lego-border text-[10px] sm:text-xs">
                                 <div className="text-white font-semibold mb-1">{d.date}</div>
                                 <div className="text-lego-yellow font-bold">${d.price.toFixed(2)}</div>
                                 <div className={`text-[10px] ${d.inStock ? 'text-green-400' : 'text-red-400'}`}>
@@ -747,7 +811,7 @@ export default function ProductDetail() {
                             )
                           }}
                         />
-                        <Area type="monotone" dataKey="price" stroke="#FFD500" fill="url(#priceGrad)" strokeWidth={2} dot={{ fill: '#FFD500', r: 3 }} activeDot={{ r: 5 }} />
+                        <Area type="monotone" dataKey="price" stroke="#FFD500" fill="url(#priceGrad)" strokeWidth={2} dot={{ fill: '#FFD500', r: 2.5 }} activeDot={{ r: 4 }} />
                       </AreaChart>
                     )}
                   </ResponsiveContainer>
@@ -756,9 +820,9 @@ export default function ProductDetail() {
             )}
 
             {chartData.length <= 1 && (
-              <div className="glass rounded-xl p-8 text-center">
+              <div className="glass rounded-xl p-6 sm:p-8 text-center">
                 <Clock size={24} className="mx-auto text-gray-600 mb-2" />
-                <p className="text-sm text-gray-500">Price history will appear after 2+ days of tracking</p>
+                <p className="text-xs sm:text-sm text-gray-500">Price history will appear after 2+ days of tracking</p>
               </div>
             )}
 
@@ -767,13 +831,13 @@ export default function ProductDetail() {
                ══════════════════════════════════════════════════════════ */}
             {stockChartData.length > 1 && !hasMultipleSources && (
               /* Original single-source stock chart (LEGO.com only) */
-              <div className="glass rounded-xl p-5">
-                <h3 className="font-display font-semibold text-sm mb-1">Stock Availability Over Time</h3>
-                <p className="text-[10px] text-gray-500 mb-4">Green = available · Orange = backorder/limited · Red = out of stock</p>
-                <div className="h-[80px]">
+              <div className="glass rounded-xl p-3 sm:p-5">
+                <h3 className="font-display font-semibold text-xs sm:text-sm mb-1">Stock Availability Over Time</h3>
+                <p className="text-[9px] sm:text-[10px] text-gray-500 mb-3 sm:mb-4">Green = available · Orange = backorder/limited · Red = out of stock</p>
+                <div className="h-[60px] sm:h-[80px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stockChartData} barCategoryGap={0}>
-                      <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 9 }} />
+                      <XAxis dataKey="date" tick={{ fill: '#555', fontSize: 8 }} interval="preserveStartEnd" />
                       <Tooltip contentStyle={TOOLTIP_STYLE}
                         content={({ active, payload }) => {
                           if (!active || !payload?.[0]) return null
@@ -799,20 +863,20 @@ export default function ProductDetail() {
 
             {/* ── Multi-source stock availability grid ── */}
             {hasMultipleSources && retailerStockChartData.length > 1 && (
-              <div className="glass rounded-xl p-5">
-                <h3 className="font-display font-semibold text-sm mb-1">Stock Availability by Retailer</h3>
-                <p className="text-[10px] text-gray-500 mb-4">Tracking availability across {activeSources.length} sources</p>
+              <div className="glass rounded-xl p-3 sm:p-5">
+                <h3 className="font-display font-semibold text-xs sm:text-sm mb-1">Stock Availability by Retailer</h3>
+                <p className="text-[9px] sm:text-[10px] text-gray-500 mb-3 sm:mb-4">Tracking availability across {activeSources.length} sources</p>
 
                 {/* Heatmap-style grid */}
-                <div className="overflow-x-auto">
-                  <div className="min-w-[400px]">
+                <div className="overflow-x-auto -mx-1">
+                  <div className="min-w-[320px] sm:min-w-[400px] px-1">
                     {/* Header row: dates */}
                     <div className="flex items-center gap-0 mb-1">
-                      <div className="w-20 shrink-0" />
+                      <div className="w-16 sm:w-20 shrink-0" />
                       {retailerStockChartData.map((d, i) => (
-                        <div key={i} className="flex-1 text-center text-[8px] text-gray-600 font-mono truncate px-0.5">
+                        <div key={i} className="flex-1 text-center text-[7px] sm:text-[8px] text-gray-600 font-mono truncate px-0.5">
                           {/* Show every Nth label to avoid crowding */}
-                          {i % Math.max(1, Math.floor(retailerStockChartData.length / 8)) === 0 ? d.date : ''}
+                          {i % Math.max(1, Math.floor(retailerStockChartData.length / 6)) === 0 ? d.date : ''}
                         </div>
                       ))}
                     </div>
@@ -822,7 +886,7 @@ export default function ProductDetail() {
                       const cfg = RETAILER_CONFIG[source]
                       return (
                         <div key={source} className="flex items-center gap-0 mb-1">
-                          <div className="w-20 shrink-0 text-[10px] font-semibold truncate pr-2" style={{ color: cfg.color }}>
+                          <div className="w-16 sm:w-20 shrink-0 text-[9px] sm:text-[10px] font-semibold truncate pr-1 sm:pr-2" style={{ color: cfg.color }}>
                             {cfg.label}
                           </div>
                           {retailerStockChartData.map((d, i) => {
@@ -832,7 +896,7 @@ export default function ProductDetail() {
                             return (
                               <div
                                 key={i}
-                                className="flex-1 h-5 mx-px rounded-sm transition-colors"
+                                className="flex-1 h-4 sm:h-5 mx-px rounded-sm transition-colors"
                                 style={{
                                   backgroundColor: !hasData ? '#1a1a26' : isAvailable ? '#22c55e40' : '#ef444440',
                                   border: hasData ? `1px solid ${isAvailable ? '#22c55e30' : '#ef444430'}` : '1px solid #1a1a26',
@@ -846,10 +910,10 @@ export default function ProductDetail() {
                     })}
 
                     {/* Legend */}
-                    <div className="flex items-center gap-4 mt-3 text-[9px] text-gray-500">
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500/40 border border-green-500/30" /> Available</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-500/25 border border-red-500/20" /> Unavailable</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#1a1a26] border border-[#1a1a26]" /> No data</span>
+                    <div className="flex items-center gap-3 sm:gap-4 mt-2 sm:mt-3 text-[8px] sm:text-[9px] text-gray-500">
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-sm bg-green-500/40 border border-green-500/30" /> Available</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-sm bg-red-500/25 border border-red-500/20" /> Unavailable</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-sm bg-[#1a1a26] border border-[#1a1a26]" /> No data</span>
                     </div>
                   </div>
                 </div>
@@ -858,18 +922,18 @@ export default function ProductDetail() {
 
             {/* Status timeline */}
             {statusTimeline.length > 0 && (
-              <div className="glass rounded-xl p-5">
-                <h3 className="font-display font-semibold text-sm mb-4">Status Timeline</h3>
+              <div className="glass rounded-xl p-3 sm:p-5">
+                <h3 className="font-display font-semibold text-xs sm:text-sm mb-3 sm:mb-4">Status Timeline</h3>
                 <div className="relative">
                   <div className="absolute left-3 top-0 bottom-0 w-px bg-lego-border" />
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {statusTimeline.map((change, i) => (
-                      <div key={i} className="flex items-start gap-3 pl-1">
+                      <div key={i} className="flex items-start gap-2 sm:gap-3 pl-1">
                         <div className="relative z-10 w-5 h-5 rounded-full bg-lego-surface2 border-2 border-lego-border flex items-center justify-center shrink-0 mt-0.5">
                         <div className={`w-2 h-2 rounded-full ${getStatusDisplay(change.to).dotClass}`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             <StatusBadge status={change.from} />
                             <span className="text-gray-600 text-[10px]">→</span>
                             <StatusBadge status={change.to} />
@@ -887,9 +951,9 @@ export default function ProductDetail() {
 
             {/* Featured flags */}
             {featured_flags && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {String(featured_flags).split(',').filter(Boolean).map(flag => (
-                  <span key={flag} className="px-2.5 py-1 glass rounded-full text-[10px] font-mono text-gray-400">{flag.trim()}</span>
+                  <span key={flag} className="px-2 sm:px-2.5 py-0.5 sm:py-1 glass rounded-full text-[9px] sm:text-[10px] font-mono text-gray-400">{flag.trim()}</span>
                 ))}
               </div>
             )}
@@ -897,12 +961,12 @@ export default function ProductDetail() {
             {/* Store link footer */}
             {storeUrl && (
               <a href={storeUrl} target="_blank" rel="noopener noreferrer"
-                className="block glass rounded-xl p-4 hover:bg-white/[0.03] transition-colors text-center group">
-                <div className="flex items-center justify-center gap-2 text-sm text-gray-400 group-hover:text-lego-blue transition-colors">
+                className="block glass rounded-xl p-3 sm:p-4 hover:bg-white/[0.03] transition-colors text-center group">
+                <div className="flex items-center justify-center gap-2 text-xs sm:text-sm text-gray-400 group-hover:text-lego-blue transition-colors">
                   <ExternalLink size={15} />
                   <span className="font-semibold">View on LEGO.com</span>
                   <span className="text-gray-600">·</span>
-                  <span className="text-xs font-mono text-gray-500">Set #{product_code}</span>
+                  <span className="text-[10px] sm:text-xs font-mono text-gray-500">Set #{product_code}</span>
                 </div>
               </a>
             )}
@@ -927,53 +991,53 @@ function RetailerCard({ source, price, regularPrice, onSale, salePct, available,
       href={url || '#'}
       target="_blank"
       rel="noopener noreferrer"
-      className={`block rounded-lg p-3 transition-all border hover:bg-white/[0.03] ${
+      className={`block rounded-lg p-2.5 sm:p-3 transition-all border hover:bg-white/[0.03] ${
         isBest ? 'border-green-500/30 bg-green-500/5' : 'border-lego-border bg-lego-surface/50'
       }`}
     >
-      <div className="flex items-center justify-between mb-1.5">
+      <div className="flex items-center justify-between mb-1 sm:mb-1.5">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
-          <span className="text-[11px] font-semibold" style={{ color: cfg.color }}>{cfg.label}</span>
-          {isBest && <span className="text-[8px] font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-full uppercase">Best</span>}
+          <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
+          <span className="text-[10px] sm:text-[11px] font-semibold" style={{ color: cfg.color }}>{cfg.label}</span>
+          {isBest && <span className="text-[7px] sm:text-[8px] font-bold text-green-400 bg-green-400/10 px-1 sm:px-1.5 py-0.5 rounded-full uppercase">Best</span>}
         </div>
-        <ExternalLink size={11} className="text-gray-600" />
+        <ExternalLink size={10} className="text-gray-600" />
       </div>
 
       <div className="flex items-baseline gap-2">
         {hasPrice ? (
           <>
-            <span className="text-base font-bold text-white">${price.toFixed(2)}</span>
+            <span className="text-sm sm:text-base font-bold text-white">${price.toFixed(2)}</span>
             {onSale && regularPrice && regularPrice > price && (
-              <span className="text-[10px] text-gray-500 line-through">${regularPrice.toFixed(2)}</span>
+              <span className="text-[9px] sm:text-[10px] text-gray-500 line-through">${regularPrice.toFixed(2)}</span>
             )}
             {onSale && salePct > 0 && (
-              <span className="text-[9px] font-bold text-lego-red">−{salePct.toFixed(0)}%</span>
+              <span className="text-[8px] sm:text-[9px] font-bold text-lego-red">−{salePct.toFixed(0)}%</span>
             )}
           </>
         ) : (
-          <span className="text-xs text-gray-500">Price unavailable</span>
+          <span className="text-[10px] sm:text-xs text-gray-500">Price unavailable</span>
         )}
       </div>
 
-      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+      <div className="flex items-center gap-1.5 sm:gap-2 mt-1 sm:mt-1.5 flex-wrap">
         {/* Availability */}
         {available != null && (
-          <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium ${available ? 'text-green-400' : 'text-red-400'}`}>
-            {available ? <CheckCircle2 size={9} /> : <XCircle size={9} />}
+          <span className={`inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] font-medium ${available ? 'text-green-400' : 'text-red-400'}`}>
+            {available ? <CheckCircle2 size={8} /> : <XCircle size={8} />}
             {available ? 'In Stock' : 'Out of Stock'}
           </span>
         )}
         {/* Free shipping */}
         {freeShipping && (
-          <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-blue-400">
-            <Truck size={9} /> Free Ship
+          <span className="inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] font-medium text-blue-400">
+            <Truck size={8} /> Free Ship
           </span>
         )}
         {/* Rating */}
         {reviewAvg > 0 && (
-          <span className="inline-flex items-center gap-0.5 text-[9px] text-gray-500">
-            <Star size={8} className="text-lego-yellow fill-lego-yellow" /> {reviewAvg.toFixed(1)}
+          <span className="inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] text-gray-500">
+            <Star size={7} className="text-lego-yellow fill-lego-yellow" /> {reviewAvg.toFixed(1)}
             {reviewCount > 0 && <span>({reviewCount.toLocaleString()})</span>}
           </span>
         )}
@@ -981,7 +1045,7 @@ function RetailerCard({ source, price, regularPrice, onSale, salePct, available,
 
       {/* Last updated */}
       {date && (
-        <div className="text-[8px] text-gray-600 mt-1.5">
+        <div className="text-[7px] sm:text-[8px] text-gray-600 mt-1 sm:mt-1.5">
           Updated {new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
         </div>
       )}
@@ -1003,9 +1067,9 @@ function StatusBadge({ status, availabilityText }) {
 
 function MiniStat({ icon, label, value, color = 'text-white' }) {
   return (
-    <div className="glass rounded-lg p-3">
-      <div className="flex items-center gap-1.5 text-gray-500 mb-1">{icon}<span className="text-[10px] font-mono uppercase tracking-wider">{label}</span></div>
-      <div className={`text-sm font-semibold ${color}`}>{value}</div>
+    <div className="glass rounded-lg p-2 sm:p-3">
+      <div className="flex items-center gap-1 sm:gap-1.5 text-gray-500 mb-0.5 sm:mb-1">{icon}<span className="text-[9px] sm:text-[10px] font-mono uppercase tracking-wider">{label}</span></div>
+      <div className={`text-xs sm:text-sm font-semibold ${color}`}>{value}</div>
     </div>
   )
 }

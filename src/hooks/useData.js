@@ -200,7 +200,7 @@ export function useProducts(filters = {}) {
       .select('*', { count: 'exact' })
 
     // Apply filters
-    if (filters.search) query = query.ilike('product_name', `%${filters.search}%`)
+    if (filters.search) query = query.or(`product_name.ilike.%${filters.search}%,product_code.ilike.%${filters.search}%`)
     if (filters.theme && filters.theme !== 'all') query = query.eq('theme', filters.theme)
     if (filters.minPrice) query = query.or(`price_usd.gte.${filters.minPrice},enriched_price_usd.gte.${filters.minPrice}`)
     if (filters.maxPrice) query = query.or(`price_usd.lte.${filters.maxPrice},enriched_price_usd.lte.${filters.maxPrice}`)
@@ -262,7 +262,7 @@ async function fetchProductsFallback(filters, setProducts, setTotal, setLoading)
     .select('*', { count: 'exact' })
     .order('scraped_date', { ascending: false })
 
-  if (filters.search) query = query.ilike('product_name', `%${filters.search}%`)
+  if (filters.search) query = query.or(`product_name.ilike.%${filters.search}%,product_code.ilike.%${filters.search}%`)
   if (filters.theme && filters.theme !== 'all') query = query.eq('theme', filters.theme)
   if (filters.minPieces) query = query.gte('piece_count', filters.minPieces)
   if (filters.maxPieces) query = query.lte('piece_count', filters.maxPieces)
