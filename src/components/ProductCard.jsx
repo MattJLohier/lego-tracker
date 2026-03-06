@@ -59,7 +59,7 @@ function StockBar({ data, height = 6 }) {
   )
 }
 
-export default function ProductCard({ product, history, isFavorite, onToggleFavorite, showCompare, isCompared, onToggleCompare }) {
+export default function ProductCard({ product, history, isFavorite, onToggleFavorite, showCompare, isCompared, onToggleCompare, index = 0 }) {
   const { user } = useAuth()
   const {
     product_name, product_code, slug, theme, price_usd, list_price_usd,
@@ -114,6 +114,12 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
 
   const statusInfo = getStatusDisplay(availability_status, in_stock)
 
+  // First ~10 cards (roughly 2 visible rows) load eagerly with high priority;
+  // everything else defers until the user scrolls near it.
+  const isAboveFold = index < 10
+  const imgLoading = isAboveFold ? 'eager' : 'lazy'
+  const imgPriority = isAboveFold ? 'high' : 'auto'
+
   return (
     <div className="glass rounded-xl overflow-hidden card-shine glass-hover transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 group relative flex flex-col">
       {/* Favorite button */}
@@ -148,7 +154,9 @@ export default function ProductCard({ product, history, isFavorite, onToggleFavo
               src={imageUrl}
               alt={product_name || `Set ${product_code}`}
               className="max-w-[85%] max-h-[85%] object-contain drop-shadow-lg"
-              loading="lazy"
+              loading={imgLoading}
+              fetchPriority={imgPriority}
+              decoding="async"
               onError={(e) => {
                 e.target.onerror = null
                 e.target.style.display = 'none'

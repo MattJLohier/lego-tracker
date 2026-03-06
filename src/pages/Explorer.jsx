@@ -253,8 +253,8 @@ export default function Explorer() {
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {products.map(p => (
-                <ProductCard key={p.product_code} product={p}
+              {products.map((p, index) => (
+                <ProductCard key={p.product_code} product={p} index={index}
                   history={histories[p.product_code] || []}
                   isFavorite={isFavorite(p.product_code)} onToggleFavorite={user ? toggleFavorite : null}
                   showCompare={compareMode} isCompared={compareList.includes(p.slug)} onToggleCompare={toggleCompare} />
